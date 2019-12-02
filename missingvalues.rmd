@@ -1,0 +1,196 @@
+---
+title: "Week12"
+author: "Ashley Hirt, Shreya Dubey, Rakib Kamal"
+date: "11/18/2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Library Packages
+
+```{r}
+library(data.table)
+library(tidyverse)
+```
+
+## Read in Data
+
+```{r read data}
+hosp <- fread("G:/My Drive/DATA/Final Project/hospital.csv", 
+              check.names=T,
+              na.strings = c("", "NA")
+)
+
+hosp <- as_tibble(hosp)
+
+# rename columns
+colnames(hosp) <- c("Area", "County", "Certificate", "Facility.ID", "Facility.Name",
+                    "Age", "Zip", "Gender", "Race", "Ethnicity", "Duration", "Type",
+                    "Discharge.Status", "Discharge.Year", "CSS.Code", "CSS.Diagnosis",
+                    "CSS.Procedure.Code", "CSS.Procedure", "DRG.Code", "DRG",
+                    "MDC.Code", "MDC", "Severity.Code", "Severity", "Mortality.Risk",
+                    "Surgical", "Payment1", "Payment2", "Payment3", "Birthweight",
+                    "Abortion", "ED", "Charges", "Costs")
+```
+
+## Examine Existing NAs
+
+```{r examine existing NAs}
+sum(complete.cases(hosp) == F) # 1725198 incomplete cases
+
+# to look at the incomplete rows (assign data frame "incomplete"):
+incomplete <- hosp[!complete.cases(hosp),]
+
+# tally up the number of NAs in each column
+nas <- c()
+invisible(
+sapply(1:ncol(incomplete), function(x) {
+  nas[x] <<- sum(is.na(incomplete[,x]))
+})
+)
+names(nas) <- colnames(incomplete)
+nas # shows the number of NAs in each column
+
+# Area, County, Certificate, and Facility.ID have 5325 instances of NAs. They all co-occur (an NA in one of these variables corresponds to an NA in the others as well). We also see that the Facility.Name variable is always "Redacted for Confidentiality" for these instances. Presumably, this is the reason that all the location information is NAs for these records.
+unique(incomplete[is.na(incomplete$Area),]$Facility.Name)
+
+
+# Zip has 36215 NAs. The data dictionary states that the patient zip code will be blank (NA) for the following confidentiality reasons: zip code population size less than 20,000 people; abortion records; less than 10 records with that zip code.
+
+
+# Severity AND Mortality.Risk each have 67 NAs, which also co-occur. Most of these records have no diganosis under the DRG column and they have a DRG.Code greater than 952. This doesn't make sense, since the maximum DRG.Code used in New York State is 952. Thus, we assume these records had missing or invalid DRG.Codes. Since Severity and mortality.risk are derived from the DRG coding system as well, it makes sense that they would also be NAs. Also, (inexplicably), for all of these records, the CSS.Diagnosis corresponds to some type of birth that was not an abortion.
+severity.incomplete <- incomplete[is.na(incomplete$Severity),]
+unique(severity.incomplete$DRG)
+unique(severity.incomplete$CSS.Diagnosis)
+# For now, we will keep these values as they are, because we don't know if they will serve some predictive purpose as a grouping later (it's unclear why they all lack a diagnosis, so perhaps that itself is meaningful). 
+
+
+# Payment2 has 834420 NAs. Payment3 has 1691076 NAs. These correspond to people that only had one payment type, so that makes sense and requires no further investigation.
+```
+
+## Change Invalid Values to NAs
+
+```{r change values to NAs}
+# examine birthweight plot for strange values
+ggplot(hosp, aes(x=Birthweight)) +
+  geom_histogram() + 
+  ggtitle("Distribution of Birthweight (g)")
+
+# replace all 0s in the birth weight category with NAs (0 indicates that the record does not correspond to a pregnancy/birth)
+hosp$Birthweight <- ifelse(hosp$Birthweight==0, NA, hosp$Birthweight)
+
+# reexamine birthweight plot
+ggplot(hosp, aes(x=Birthweight)) +
+  geom_histogram() + 
+  ggtitle("Distribution of Birthweight (g)")
+# none of the birthweights appear abnormal, follow a normal distribution as expected for most health-related data.
+
+
+# examine gender plot for unusual values
+ggplot(hosp, aes(x=Gender)) + 
+  geom_bar(stat="count") +
+  theme_minimal() +
+  ggtitle("Distribution of Gender")
+# replace all "unknown" genders with NA
+sum(hosp$Gender == "U") # only 57 records with unknown gender.
+hosp$Gender <- ifelse(hosp$Gender=="U", NA, hosp$Gender)
+
+
+# examine ethnicity plot for unusual values
+ggplot(hosp, aes(x=Ethnicity)) + 
+  geom_bar(stat="count") +
+  theme_minimal() +
+  ggtitle("Distribution of Ethnicity")
+# replace all "unknown" ethnicities with NA
+sum(hosp$Ethnicity == "Unknown") # 97,180 records with Unknown ethnicities
+hosp$Ethnicity <- ifelse(hosp$Ethnicity=="Unknown", NA, hosp$Ethnicity)
+
+
+# replace surgical "Not Applicable" entries with NA
+sum(hosp$Surgical == "Not Applicable") # 67 Surgery "Not Applicable"s
+hosp$Surgical <- ifelse(hosp$Surgical=="Not Applicable", NA, hosp$Surgical)
+
+
+# replace payment1 "Unknown" with NA
+sum(hosp$Payment1 == "Unknown") #6896 Payment1 "Unknown"
+hosp$Payment1 <- ifelse(hosp$Payment1=="Unknown", NA, hosp$Payment1)
+# Note that we are not replacing payment2 or payment3 "Unknown" with NA because currently, NA stands for "there was not a second/third payment type" and we don't want to combine these records. Perhaps (although doubtedly) the unknown category has predictive value and should be kept separate from the other NAs. 
+```
+
+## Examine Distributions of Variables
+
+```{r examine distributions}
+ggplot(hosp, aes(x=Area)) + 
+  geom_bar(stat="count") + 
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, size=8)) +
+  ggtitle("Distribution of Hospital Service Area")
+# has an NA category, distribution looks appropriate
+
+ggplot(hosp, aes(x=County)) + 
+  geom_bar(stat="count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, size=8, vjust=0.2)) +
+  ggtitle("Distribution of County")
+# has an NA category, distribution looks appropriate
+
+
+# examine how cerficate variable compares to facility.name and facility.ID (are they redundant?)
+name <- list()
+id <- list()
+
+x <- hosp %>%
+  group_by(Certificate) %>%
+  summarise(
+    name = list(unique(Facility.Name)),
+    id = list(unique(Facility.ID))
+  )
+x$name[c(1:10)]
+# From this, we see that there are multiple hospital names for the same certificate number, but they are typically different campuses of the same main hospital (e.g. "Albany Medical Center Hospital" and "Albany Medical Center - South Clinical Campus"). The facility ID corresponds to these campus differences. So we assume that in our classification tasks, we will not use certificate or facility.name, we'll just use facility.ID because it encapsulates the former two variables.
+
+
+ggplot(hosp, aes(x=Facility.ID)) + 
+  geom_histogram() +
+  theme_minimal() +
+  ggtitle("Distribution of Facility ID")
+# it appears unusual that some facility IDs are in the 9000s, but this is not mentioned in our data dictionary, so there is no way to know if they are valid or not.
+high.id <- filter(hosp, Facility.ID>9000)
+unique(high.id$Area)
+unique(high.id$Facility.Name)
+# examination of these rows indicates there are 3,151 rows with facility.ID>9000. They all come from one of 3 hospitals: St Peter's Addiction Recovery Center, The Burdett Care Center, and Crouse Hospital - Commonwealth Division. Although their facility.ID values seem unusual, these records do appear valid, so we keep them in the dataset unchanged.
+
+
+ggplot(hosp, aes(x=Age)) + 
+  geom_bar(stat="count") +
+  theme_minimal() +
+  ggtitle("Distribution of Age Group")
+# appears normal, no NAs. Age groups 50-69, and 70+ have the highest amount of hospital discharge records, which is consistent with what is expected.
+
+ggplot(hosp, aes(x=Race)) + 
+  geom_bar(stat="count") +
+  theme_minimal() +
+  ggtitle("Distribution of Race")
+# appears normal, no NAs. Note that "other race" is explained in the data dictionary as coding for Asians, Pacific Islanders, and Native Americans.
+
+y <- hosp %>% group_by(Duration) %>% summarize(count = n())
+ggplot(y, aes(x=as.numeric(Duration), y=count)) + 
+  geom_point() +
+  theme_minimal() +
+  ggtitle("Distribution of Duration of Hospital Stay")
+# Here we see that the vast majority of Hospital durations are less than 10 days. Also, the one row that was removed was "120+" bc it is not easily coerced to numeric. We know a priori from the data dictionary that this categorization of duration stands for any duration greater than 120 days.
+```
+
+Note: Currently we are planning on using cost as a continuous variable, but if we were to want to group it with a set cutoff (e.g. "low", "medium", "high"), we would coerce the variable into categorical.
+
+Also, we did not perform extensive coercion of our variables into the proper types because most of them were automatically read in as their proper class.
+
+## Summary of Next Steps
+We would like to classify whether someone went to the emergency department based on their demographic information (age group, sex, race), medical information (diagnosis, severity), and payment information (cost, payment type). Our next steps include running various models (kNN, decision trees, bagging, random forests) to see which produces the highest accuracy. We will also engineer features. Some current thoughts are setting thresholds for costs instead of using it as a continuous variable, reformatting and grouping payment types so there aren't as many levels, creating an "extra help needed" variable based on discharge status (nursing home would need extra help; home discharges would not). We could also group diagnoses by broader categories (e.g. cancer, transplant), since they are currently very granular and specific (about 300 different categories); there are some groupings like this already (MDC). 
+
+If we have time, we could also work on classifying other variables, like discharge status or duration. (However, the latter would likely require regression since it is a continuous variable. Also, since we see from the above plot that the distribution is highly skewed right, we may need to use a metric other than accuracy so our model doesn't "ignore" the infrequent high durations in favor of predicting the frequent low duration records.)

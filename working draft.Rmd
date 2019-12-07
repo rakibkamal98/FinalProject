@@ -366,7 +366,7 @@ ggplot(hosp, aes(x=chargeratio)) +
   geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed")
 # This distribution is obviously right-skewed, with a median of around 2. 
 
-
+unique(hosp$MDC)
 
 
 

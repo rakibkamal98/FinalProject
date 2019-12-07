@@ -17,6 +17,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(data.table)
 library(tidyverse)
+library(viridis)
+theme_set(theme_minimal())
+
+# colors used for plotting
+mygreen <- "#22908C"
+mypurple <- "#450D54"
 ```
 
 ## Read in Data
@@ -27,8 +33,8 @@ hosp <- fread("G:/My Drive/DATA/Final Project/hospital.csv",
               check.names=T,
               na.strings = c("", "NA")
 )
-hosp <- as_tibble(hosp)
 
+hosp <- as.tibble(hosp)
 # save original dataset before renaming
 hosp_og <- hosp
 
@@ -111,7 +117,6 @@ Repeat for gender, and replace all 57 "unknown" genders with NAs.
 # examine gender plot for unusual values
 ggplot(hosp, aes(x=Gender)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   ggtitle("Distribution of Gender")
 # replace all "unknown" genders with NA
 sum(hosp$Gender == "U") # only 57 records with unknown gender.
@@ -123,7 +128,6 @@ Repeat for ethnicity, and replace all 97,180 "unknown" ethnicities with NAs.
 # examine ethnicity plot for unusual values
 ggplot(hosp, aes(x=Ethnicity)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   ggtitle("Distribution of Ethnicity")
 # replace all "unknown" ethnicities with NA
 sum(hosp$Ethnicity == "Unknown") # 97,180 records with Unknown ethnicities
@@ -135,21 +139,31 @@ Repeat for surgical, and replace all 67 "Not Applicable" entries with NAs
 # examine categories
 ggplot(hosp, aes(x=Surgical)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   ggtitle("Distribution of Surgical Category")
 # replace surgical "Not Applicable" entries with NA
 sum(hosp$Surgical == "Not Applicable") # 67 Surgery "Not Applicable"s
 hosp$Surgical <- ifelse(hosp$Surgical=="Not Applicable", NA, hosp$Surgical)
 ```
+
 Repeat for Type of admission
 ```{r}
 sum(hosp$Type=="Not Available") # 435 of these rows
 hosp$Type <- ifelse(hosp$Type == "Not Available", NA, hosp$Type)
 ```
+
 Repeat for discharge status.
 ```{r}
 sum(hosp$Discharge.Status=="Another Type Not Listed")
 hosp$Discharge.Status <- ifelse(hosp$Discharge.Status=="Another Type Not Listed", NA, hosp$Discharge.Status)
+```
+
+Repeat for CCS code. From the distribution, we see that categories above 650-63 and 670 represent MHSA coding (mental health codes). 917 stands for unclassified E code and 999 is ungroupable, which we will recode as NAs
+```{r}
+ggplot(hosp, aes(x=CCS.Code)) + geom_histogram()
+table(hosp$CCS.Code[hosp$CCS.Code > 260])
+
+#recode as NAs  
+hosp$CCS.Code <- ifelse(hosp$CCS.Code==999, NA, hosp$CCS.Code)
 ```
 
 Repeat for payment1, replace all 6,896 "Unknowns" with NAs. Note that we are not replacing payment2 or payment3 "Unknown" with NA because currently, NA stands for "there was not a second/third payment type" and we don't want to combine these records. Perhaps (although doubtedly) the unknown category has predictive value and should be kept separate from the other NAs. 
@@ -164,14 +178,12 @@ Next, we examine the distributions of our variables to get an idea of whether th
 ```{r examine distributions}
 ggplot(hosp, aes(x=Area)) + 
   geom_bar(stat="count") + 
-  theme_minimal() + 
   theme(axis.text.x = element_text(angle = 45, size=8)) +
   ggtitle("Distribution of Hospital Service Area")
 # has an NA category, distribution looks appropriate
 
 ggplot(hosp, aes(x=County)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   theme(axis.text.x = element_text(angle = 90, size=8, vjust=0.2)) +
   ggtitle("Distribution of County")
 # has an NA category, distribution looks appropriate
@@ -201,7 +213,6 @@ hosp <- hosp[,-which(colnames(hosp) %in% c("Certificate", "Facility.Name"))]
 # examine distribution of facility ID
 ggplot(hosp, aes(x=Facility.ID)) + 
   geom_histogram() +
-  theme_minimal() +
   ggtitle("Distribution of Facility ID")
 ```
 It appears unusual that some facility IDs are in the 9000s, but this is not mentioned in our data dictionary, so there is no way to know if they are valid or not.
@@ -217,7 +228,6 @@ Next, we examine a distribution of age groups.
 ```{r}
 ggplot(hosp, aes(x=Age)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   ggtitle("Distribution of Age Group")
 ```
 This appears normal, no NAs. Age groups 50-69, and 70+ have the highest amount of hospital discharge records, which is consistent with what is expected.
@@ -225,7 +235,6 @@ This appears normal, no NAs. Age groups 50-69, and 70+ have the highest amount o
 ```{r}
 ggplot(hosp, aes(x=Race)) + 
   geom_bar(stat="count") +
-  theme_minimal() +
   ggtitle("Distribution of Race")
 ```
 The distribution of race also appears normal, no NAs. Note that "other race" is explained in the data dictionary as coding for Asians, Pacific Islanders, and Native Americans.
@@ -234,7 +243,6 @@ The distribution of race also appears normal, no NAs. Note that "other race" is 
 y <- hosp %>% group_by(Duration) %>% summarize(count = n())
 ggplot(y, aes(x=as.numeric(Duration), y=count)) + 
   geom_point() +
-  theme_minimal() +
   ggtitle("Distribution of Duration of Hospital Stay")
 ```
 Here we see that the vast majority of Hospital durations are less than 10 days. Also, the one row that was removed was "120+" bc it is not easily coerced to numeric. We know a priori from the data dictionary that this categorization of duration stands for any duration greater than 120 days.
@@ -258,21 +266,68 @@ hosp <- hosp %>%
          high.id = ifelse(Facility.ID > 9000, 1, 0),
          na.type = ifelse(is.na(Type), 1, 0),
          na.discharge = ifelse(is.na(Discharge.Status), 1, 0),
-         na.ccs = ifelse(is.na(CCS.Code), 1, 0)
+         na.ccs = ifelse(is.na(CCS.Code), 1, 0),
+         na.ccs.procedure = ifelse(is.na(CCS.Procedure.Code), 1, 0)
          )
 ```
 
 
 # Test Center
 ```{r}
-ggplot(hosp, aes(x=Type)) + geom_bar(stat="count") + theme_minimal()
-ggplot(hosp, aes(x=Discharge.Status)) + geom_bar(stat="count") + theme_minimal() + theme(axis.text.x = element_text(angle=90))
+ggplot(hosp, aes(x=Type)) + geom_bar(stat="count")
+ggplot(hosp, aes(x=Discharge.Status)) + geom_bar(stat="count") + theme(axis.text.x = element_text(angle=90))
 
-ggplot(hosp, aes(x=CSS.Code)) + geom_histogram()
-table(hosp$CSS.Code[hosp$CSS.Code > 260])
-# categories above 650-63 and 670 represent MHSA coding (mental health codes)
-# that leaves 917 and 999 as weird ones. 917 stands for unclassified E code and 999 is ungroupable. 
-hosp$CCS.Code <- ifelse(hosp$CCS.Code==999, NA, hosp$CCS.Code)
 
+
+# THIS STILL NEEDS TO BE ADDED IN 
+ggplot(hosp, aes(x=CCS.Procedure.Code)) + geom_histogram()
+# the highest CCS Procedure code is 231. 
+unique(hosp[hosp$CCS.Procedure.Code>231, "CCS.Procedure.Code"])
+# all the records greater than 231 are coded 999 for ungroupable, so we will make those NAs.
+hosp$CCS.Procedure.Code <- ifelse(hosp$CCS.Procedure.Code==999, NA, hosp$CCS.Procedure.Code)
+# there are also 0s in the procedure code, which correponds to no procedure performed. we will create an indicator variable for those later.
+hosp[hosp$CCS.Procedure.Code==0, c("CCS.Procedure.Code", "CCS.Procedure")][1,]
+
+
+# ADD IN
+hosp$Duration <- ifelse(hosp$Duration == "120 +", 120, hosp$Duration)
+hosp$Duration <- as.numeric(hosp$Duration)
+
+
+# ADD IN
+# 0s don't make sense for Severity.Code and correspond to the redacted rows. 
+hosp$Severity.Code <- ifelse(hosp$Severity.Code==0, NA, hosp$Severity.Code)
+
+
+
+
+
+library(corrplot)
+
+num <- hosp[,c("Duration", "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "Severity.Code", "Birthweight", "Charges", "Costs")]
+
+x <- cor(num[complete.cases(num)==T,])
+corrplot(x)
+# from the corrplot, we see that DRG.Code and MDC.Code are highly correlated. This is surprising, considering that there are only 26 MDC codes which correspond to organ systems, while there are 300+ DRG Codes that represent specific diseases. We also see that there is a moderate positive correlation between Severity.Code and Duration, which makes sense since Severity.Code is on a 1-4 scale with 4 being extremely severe. Also, there is a moderate negative correalation between birthweight and Duration (again as expected, these likely represent premature babies). There is a strong positive correlation between charges and duration, as well as costs with duration and costs with charges. Finally, there is a weak negative correlation between birthweight and severity.code, a weak postivie correlation of severity.code with costs and severity.code with charges, and a weak negative association between birthweight and charges/costs.
+
+# I am surprised to see the signifcance that birthweight has as a predictor for our other variables. Specifically, we can draw some preliminary conclusions: the lower the birthweight, the higher the duration, the higher the severity.code, and the higher the charges/costs.
+births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),]
+ggplot(births[!is.na(births$Severity.Code),], aes(
+  x=as.factor(Severity.Code), y=Birthweight)
+  ) +
+  geom_boxplot(colour=mygreen)
+
+
+ggplot(births, aes(x=Birthweight, y=Duration)) + 
+  geom_point(alpha=.3)
+
+
+# make all non-numeric columns into factors
+num.index <- c()
+for (i in 1:length(colnames(num))) {
+  num.index[i] <- which(colnames(num)[i] == colnames(hosp))
+}
+factor.index <- (1:ncol(hosp))[-num.index]
+apply(hosp[,factor.index], 2, as.factor)
 
 ```

@@ -339,17 +339,34 @@ ggplot(births, aes(x=Birthweight, y=Costs)) +
   ylim(0, 1000000) # to cut out outliers
 
 
-ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
-  geom_boxplot(outlier.alpha=.3)
-# 2, 12, 13 have lower durations and fewer high outliers. 1, 17-19, and 22-25 have higher average durations. We also see this played out in their averages.
-hosp %>%
+
+
+durs <- hosp %>%
   group_by(MDC.Code) %>%
   summarise(
-    dur = mean(Duration),
+    dur = median(Duration, na.rm=T),
     cost = mean(Costs),
     charge = mean(Charges)
   ) %>%
   arrange(desc(dur))
+
+ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_text(data = durs, aes(x = as.factor(MDC.Code), y = dur, label = dur), 
+              size = 3.5, vjust = -.3, color=mygreen) +
+  coord_cartesian(ylim=c(0, 25)) +
+  scale_x_discrete(limits = c("2", "12", "13", "17", "18", "19", "22", "23", "24", "25")) +
+  xlab("MDC Code") +
+  ylab("Duration of Admission (days)") +
+  ggtitle("Comparison of the Distribution of Admission Duration between MDC Codes")
+# only choosing to output durations that seem different from the norm of 3 or so days.
+
+# 2, 12, 13 have lower durations and fewer high outliers. 17-19, and 22-25 have higher average durations. We also see this played out in their averages.
+
+# just show a couple and show the median. 
+
+  
+  
 
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
@@ -361,13 +378,11 @@ ggplot(hosp, aes(x=chargeratio)) +
   xlim(0, 20) # cut out outliers
 
 ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram(bins=30) +
-  xlim(0, 10) +
+  geom_histogram(bins=15) +
+  xlim(0,10) +
   geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed")
 # This distribution is obviously right-skewed, with a median of around 2. 
-
-unique(hosp$MDC)
-
+# note removal of rows with 0 cost are being removed.
 
 
 

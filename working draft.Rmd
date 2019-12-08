@@ -457,15 +457,14 @@ hosp <- hosp %>%
   ))
 
 # Birthweight find cutoffs
-hosp %>%
+hosp <- hosp %>%
   filter(!is.na(Birthweight)) %>%
   mutate(birthweight.cat = case_when(
     Birthweight < 2500 & Birthweight > 1500 ~ "Low",
     Birthweight <= 1500 & Birthweight > 1000 ~ "Very Low",
     Birthweight <= 1000 ~ "Extremely Low",
     TRUE ~ "Normal"
-  )) %>%
-  select(Birthweight, birthweight.cat)
+  ))
 
 # average cost for each prodedure? https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp
 
@@ -496,7 +495,8 @@ hosp <- hosp %>%
     CCS.Procedure.Code %in% c(176:181, 192, 183, 219, 218, 197, 198, 209, 210, 196, 211, 226, 227, 229, 231, 224) ~ "Misc or Diagnostic",
     CCS.Procedure.Code == 0 ~ "Ungroupable",
     is.na(CCS.Procedure.Code) ~ "No Procedure"
-  )) %>%
-  select(CCS.Procedure.Group, CCS.Procedure.Code)
+  ))
+
+write.csv(data.frame("x"=sort(unique(hosp$CCS.Code))), file="C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/ccscodes.csv", row.names=F)
 
 ```

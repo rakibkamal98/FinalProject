@@ -477,6 +477,26 @@ procs <- hosp %>%
   ) %>%
   select(CCS.Procedure.Code, proc)
 
-write.csv(procs, "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/procs.csv", row.names=F)
-join
+hosp <- hosp %>%
+  mutate(CCS.Procedure.Group = case_when(
+    CCS.Procedure.Code %in% c(1:9, 199, 188) ~ "Nervous System",
+    CCS.Procedure.Code %in% c(10:12) ~ "Endocrine System",
+    CCS.Procedure.Code %in% c(13:21, 220) ~ "Eyes",
+    CCS.Procedure.Code %in% c(22:33) ~ "ENT",
+    CCS.Procedure.Code %in% c(34:42, 216:217, 208) ~ "Respiratory System",
+    CCS.Procedure.Code %in% c(43:63, 201:203, 205, 225, 189:191, 193, 204) ~ "Cardiovascular System",
+    CCS.Procedure.Code %in% c(64:67, 222, 228) ~ "Hemic and Lymphatic System",
+    CCS.Procedure.Code %in% c(69:99, 194, 223, 184:186, 221) ~ "Digestive System",
+    CCS.Procedure.Code %in% c(100:112, 195, 187, 200) ~ "Urinary System",
+    CCS.Procedure.Code %in% c(113:118) ~ "Male Genital Organs",
+    CCS.Procedure.Code %in% c(119:123) ~ "Female Genital Organs",
+    CCS.Procedure.Code %in% c(124:141) ~ "Obstetrical Procedures",
+    CCS.Procedure.Code %in% c(142:164, 207, 212:215, 230) ~ "Musculoskeletal",
+    CCS.Procedure.Code %in% c(165:175, 182) ~ "Integumentary System and Breast",
+    CCS.Procedure.Code %in% c(176:181, 192, 183, 219, 218, 197, 198, 209, 210, 196, 211, 226, 227, 229, 231, 224) ~ "Misc or Diagnostic",
+    CCS.Procedure.Code == 0 ~ "Ungroupable",
+    is.na(CCS.Procedure.Code) ~ "No Procedure"
+  )) %>%
+  select(CCS.Procedure.Group, CCS.Procedure.Code)
+
 ```

@@ -423,5 +423,60 @@ for (i in 1:length(colnames(num))) {
 }
 factor.index <- (1:ncol(hosp))[-num.index]
 apply(hosp[,factor.index], 2, as.factor)
+```
 
+```{r}
+# feature engineering
+
+
+# median income for the diff zipcodes
+# read in income file
+incomes <- read.csv(file="C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/zipcodes - Sheet1.csv")
+colnames(incomes)[1] <- "Zip" # rename zip.code column
+# perform left outer join on our hosp dataset and the income dataset, b y Zipcode
+hosp <- merge(hosp, incomes, by="Zip", all=T)
+# rename the median income column
+colnames(hosp)[which(colnames(hosp)=="Median.Income..family.")] <- "Median.Income"
+
+
+# number of payment types (?)
+hosp <- hosp %>%
+  mutate(numpay = case_when(
+    is.na(Payment2) & is.na(Payment3) ~ 1,
+    !is.na(Payment2) & is.na(Payment3) ~ 2,
+    !is.na(Payment2) & !is.na(Payment3) ~ 3
+  ))
+
+# self-pay indicator
+hosp <- hosp %>%
+  mutate(selfpay = case_when(
+    Payment1 == "Self-Pay" ~ 1,
+    Payment2 == "Self-Pay" ~ 1,
+    Payment3 == "self-Pay" ~ 1,
+    TRUE ~ 0
+  ))
+
+# Birthweight find cutoffs
+hosp %>%
+  filter(!is.na(Birthweight)) %>%
+  mutate(birthweight.cat = case_when(
+    Birthweight < 2500 & Birthweight > 1500 ~ "Low",
+    Birthweight <= 1500 & Birthweight > 1000 ~ "Very Low",
+    Birthweight <= 1000 ~ "Extremely Low",
+    TRUE ~ "Normal"
+  )) %>%
+  select(Birthweight, birthweight.cat)
+
+# average cost for each prodedure? https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp
+
+# overall grouping for each procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp app
+procs <- hosp %>%
+  group_by(CCS.Procedure.Code) %>%
+  summarise(
+    proc = unique(CCS.Procedure)
+  ) %>%
+  select(CCS.Procedure.Code, proc)
+
+write.csv(procs, "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/procs.csv", row.names=F)
+join
 ```

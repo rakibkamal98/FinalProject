@@ -346,7 +346,7 @@ durs <- hosp %>%
   summarise(
     dur = median(Duration, na.rm=T),
     cost = mean(Costs),
-    charge = mean(Charges)
+    charge = median(Charges)
   ) %>%
   arrange(desc(dur))
 
@@ -364,9 +364,23 @@ ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
 # 2, 12, 13 have lower durations and fewer high outliers. 17-19, and 22-25 have higher average durations. We also see this played out in their averages.
 
 # just show a couple and show the median. 
+colnames(hosp)
+ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,250000)) +
+  xlab("MDC Code") +
+  ylab("Charges ($)") +
+  #ggtitle("Comparison of the Distribution of Charges between MDC Codes") +
+  scale_x_discrete(limits=c("8", "14", "15", "17", "18", "20", "22", "25")) +
+  geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1) +
+  theme(plot.title = element_text(color="navy blue"))
 
   
-  
+hosp %>%
+  group_by(MDC.Code) %>%
+  summarise(
+    k=unique(MDC)
+  )
 
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
@@ -377,14 +391,30 @@ ggplot(hosp, aes(x=chargeratio)) +
   geom_histogram() +
   xlim(0, 20) # cut out outliers
 
-ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram(bins=15) +
+sapply(1:25, function(x) {
+ggplot(filter(hosp, MDC.Code==13), aes(x=chargeratio)) +
+  geom_histogram(bins=15, fill="white", color="black") +
   xlim(0,10) +
-  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed")
+  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
+  xlab("Ratio of Charges to Costs") +
+  ylab("Number of Admissions") +
+  #ggtitle("Distribution of Charge Ratio") +
+  scale_y_continuous(labels=scales::comma) +
+  facet_wrap(MDC.Code~.)
+})
 # This distribution is obviously right-skewed, with a median of around 2. 
 # note removal of rows with 0 cost are being removed.
 
+ggplot(hosp, aes(x=chargeratio)) +
+  geom_histogram(bins=15, fill="white", color="black") +
+  xlim(0,10) +
+  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
+  xlab("Ratio of Charges to Costs") +
+  ylab("Number of Admissions") +
+  #ggtitle("Distribution of Charge Ratio") +
+  scale_y_continuous(labels=scales::comma)
 
+median(hosp$chargeratio)
 
 # make all non-numeric columns into factors
 num.index <- c()

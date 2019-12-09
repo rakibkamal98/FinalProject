@@ -210,9 +210,6 @@ x$name[c(1:10)]
 From this, we see that there are multiple hospital names for the same certificate number, but they are typically different campuses of the same main hospital (e.g. "Albany Medical Center Hospital" and "Albany Medical Center - South Clinical Campus"). The facility ID corresponds to these campus differences. So we assume that in our classification tasks, we will not use certificate or facility.name, we'll just use facility.ID because it encapsulates the former two variables.
 
 ```{r}
-# drop columns Facility.Name and Facility.ID
-hosp <- hosp[,-which(colnames(hosp) %in% c("Certificate", "Facility.Name"))]
-
 # examine distribution of facility ID
 ggplot(hosp, aes(x=Facility.ID)) + 
   geom_histogram() +
@@ -226,6 +223,12 @@ unique(high.id$Area)
 unique(high.id$Facility.Name)
 ```
 Examination of these rows indicates there are 3,151 rows with facility.ID>9000. They all come from one of 3 hospitals: St Peter's Addiction Recovery Center, The Burdett Care Center, and Crouse Hospital - Commonwealth Division. Although their facility.ID values seem unusual, these records do appear valid, so we keep them in the dataset unchanged.
+
+After performing this analysis, we drop the facility.name and certificate rows, but keep the Facility.ID variable.
+```{r}
+# drop columns Facility.Name and certificate
+hosp <- hosp[,-which(colnames(hosp) %in% c("Certificate", "Facility.Name"))]
+```
 
 Next, we examine a distribution of age groups.
 ```{r}
@@ -311,7 +314,7 @@ hosp$MDC.Code <- ifelse(hosp$MDC.Code==0, NA, hosp$MDC.Code)
 
 
 library(corrplot)
-
+hosp$Duration <- as.numeric(hosp$Duration)
 num <- hosp[,c("Duration", "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "Severity.Code", "Birthweight", "Charges", "Costs")]
 
 x <- cor(num[complete.cases(num)==T,])
@@ -514,9 +517,32 @@ hosp <- merge(hosp, county, by="County", all=T)
 Test/Train split
 ```{r}
 library(caret)
+library(tidyverse)
 set.seed(101)
 index <- sample(1:nrow(hosp), .8*nrow(hosp))
+
+# make character columns into factors
 hosp$Severity.Code <- as.factor(hosp$Severity.Code)
+hosp$Age <- as.factor(hosp$Age)
+hosp$Gender <- as.factor(hosp$Gender)
+hosp$Race <- as.factor(hosp$Race)
+hosp$Ethnicity <- as.factor(hosp$Ethnicity)
+
+num.index <- c()
+for (i in 1:length(colnames(num))) {
+  num.index[i] <- which(colnames(num)[i] == colnames(hosp))
+}
+factor.index <- (1:ncol(hosp))[-num.index]
+
+factorize <- function(x) {
+  hosp[[x]] <<- as.factor(hosp[[x]])
+}
+sapply(colnames(hosp)[factor.index], function(x) {
+  hosp[,factor.index][x] <<- factorize)
+
+
+samp <- hosp[sample(1:nrow(hosp), 10000),]
+
 train <- hosp[index,]
 test <- hosp[-index,]
 ```
@@ -524,19 +550,32 @@ test <- hosp[-index,]
 Random Forest Model
 ```{r}
 library(randomForest)
-features <- train %>% 
-  select("Charges", "Costs", "Duration", "Severity.Code") %>% 
-  filter(!is.na(Severity.Code))
+library(tidyverse)
 
-features[,-which(colnames(features)=="Charges")]
-?randomForest
-fit <- randomForest(x=features[,-which(colnames(features)=="Charges")], 
-                    y=features$Charges, 
-                    data=features, 
-                    replace=T, # changed replace=T instead of smaller sample size
+
+features <- samp %>% 
+  select("Charges", "Costs", "Duration", "Severity.Code", 
+         "Age", "Gender", "Race", "Ethnicity", "Zip", "Area", "Type", "Discharge.Status",
+         "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "MDC", "Mortality.Risk",
+         "Surgical", "Payment1", "Payment2", "Payment3", "Abortion", "ED",
+         "redacted", "na.zip", "invalid.drg", "na.payment1", "no.payment2", "birthweight.cat",
+         "if.birth")
+
+uniques <- sapply(apply(hosp, 2, unique), length)
+uniques
+uniques.samp <- sapply(apply(samp, 2, unique), length)
+uniques.samp
+
+
+apply(apply(features, 2, is.na), 2, sum)
+
+fit <- randomForest(formula=Charges~., 
+                    data=features,
                     ntree=50,
-                    mtry=2, # mtry=number of features at each node (sqrt(11ish))
-                    importance=T)
+                    importance=T,
+                    na.action=na.omit)
+fit
+library(caret)
 varImp(fit)
 varImpPlot(fit, type=2)
 ```

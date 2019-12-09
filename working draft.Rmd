@@ -29,7 +29,10 @@ mypurple <- "#450D54"
 
 First, we read in our data and the columns. We will also get rid of Discharge.Year because all of the years were 2016.
 ```{r read data}
-hosp <- fread("C:\\Users\\Rakib Kamal\\Box Sync\\Fall 2019\\DS4001\\Projects\\Final\\hospital.csv", 
+ashley <- "G:/My Drive/DATA/Final Project/hospital.csv"
+rakib <- "C:\\Users\\Rakib Kamal\\Box Sync\\Fall 2019\\DS4001\\Projects\\Final\\hospital.csv"
+
+hosp <- fread(ashley, 
               check.names=T,
               na.strings = c("", "NA")
 )
@@ -422,7 +425,7 @@ for (i in 1:length(colnames(num))) {
   num.index[i] <- which(colnames(num)[i] == colnames(hosp))
 }
 factor.index <- (1:ncol(hosp))[-num.index]
-apply(hosp[,factor.index], 2, as.factor)
+invisible(apply(hosp[,factor.index], 2, as.factor))
 ```
 
 ```{r}
@@ -431,15 +434,17 @@ apply(hosp[,factor.index], 2, as.factor)
 
 # median income for the diff zipcodes
 # read in income file
-incomes <- read.csv(file="C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\zipcodes - Sheet1.csv")
+rakib2 <- "C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\zipcodes - Sheet1.csv"
+ashley2 <- "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/zipcodes - Sheet1.csv"
+incomes <- read.csv(file=ashley2)
 colnames(incomes)[1] <- "Zip" # rename zip.code column
-# perform left outer join on our hosp dataset and the income dataset, b y Zipcode
+# perform left outer join on our hosp dataset and the income dataset, by Zipcode
 hosp <- merge(hosp, incomes, by="Zip", all=T)
 # rename the median income column
 colnames(hosp)[which(colnames(hosp)=="Median.Income..family.")] <- "Median.Income"
 
 
-# number of payment types (?)
+# number of payment types
 hosp <- hosp %>%
   mutate(numpay = case_when(
     is.na(Payment2) & is.na(Payment3) ~ 1,
@@ -458,7 +463,6 @@ hosp <- hosp %>%
 
 # Birthweight find cutoffs
 hosp <- hosp %>%
-  filter(!is.na(Birthweight)) %>%
   mutate(birthweight.cat = case_when(
     Birthweight < 2500 & Birthweight > 1500 ~ "Low",
     Birthweight <= 1500 & Birthweight > 1000 ~ "Very Low",
@@ -499,7 +503,9 @@ hosp <- hosp %>%
 
 
 # read in county data
-county <- read.csv("C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\county.csv")
+rakib3 <- "C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\county.csv"
+ashley3 <- "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/county.csv"
+county <- read.csv(ashley3)
 # left outer join with county data
 hosp <- merge(hosp, county, by="County", all=T)
 
@@ -507,8 +513,10 @@ hosp <- merge(hosp, county, by="County", all=T)
 
 Test/Train split
 ```{r}
+library(caret)
 set.seed(101)
-index <- createDataPartition(hosp$Charges,p = 0.8, list = FALSE)
+index <- sample(1:nrow(hosp), .8*nrow(hosp))
+hosp$Severity.Code <- as.factor(hosp$Severity.Code)
 train <- hosp[index,]
 test <- hosp[-index,]
 ```
@@ -516,12 +524,19 @@ test <- hosp[-index,]
 Random Forest Model
 ```{r}
 library(randomForest)
-features <- train %>% select("Charges", "Costs", "Duration", "Severity.Code")%>% filter(!is.na(Severity.Code))
-fit <- randomForest(Charges~., data=features, 
-                     replace=T, # changed replace=T instead of smaller sample size
-                     ntree=500,
-                     mtry=2, # mtry=number of features at each node (sqrt(11ish))
-                     importance=T)
+features <- train %>% 
+  select("Charges", "Costs", "Duration", "Severity.Code") %>% 
+  filter(!is.na(Severity.Code))
+
+features[,-which(colnames(features)=="Charges")]
+?randomForest
+fit <- randomForest(x=features[,-which(colnames(features)=="Charges")], 
+                    y=features$Charges, 
+                    data=features, 
+                    replace=T, # changed replace=T instead of smaller sample size
+                    ntree=50,
+                    mtry=2, # mtry=number of features at each node (sqrt(11ish))
+                    importance=T)
 varImp(fit)
 varImpPlot(fit, type=2)
 ```

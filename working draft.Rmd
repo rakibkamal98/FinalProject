@@ -497,6 +497,10 @@ hosp <- hosp %>%
     is.na(CCS.Procedure.Code) ~ "No Procedure"
   ))
 
-write.csv(data.frame("x"=sort(unique(hosp$CCS.Code))), file="C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/ccscodes.csv", row.names=F)
+
+# read in county data
+county <- read.csv("C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/county.csv")
+# left outer join with county data
+hosp <- merge(hosp, county, by="County", all=T)
 
 ```

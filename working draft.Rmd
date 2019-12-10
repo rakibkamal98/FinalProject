@@ -56,7 +56,7 @@ hosp <- hosp[,-which(colnames(hosp)=="Discharge.Year")]
 ```
 
 ## Examine Existing NAs
-Then, we examine existing NAs. We see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. 
+Then, we examine existing NAs. We see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. Please note that in any cases where we think there could be systematic missingness in categorical variables, we are keeping the variables as "unknown" or "not applicable" rather than recoding them as NAs. This is because randomForest removes any rows with NAs or forces you to impute them; instead, we'd like to keep them as a separate grouping. For continuous variables, we are recoding them as NAs to avoid introducing strings into a numeric variable.
 ```{r examine existing NAs}
 sum(complete.cases(hosp) == F) # 1725198 incomplete cases
 
@@ -80,7 +80,7 @@ unique(incomplete[is.na(incomplete$Area),]$Facility.Name)
 Zipcode has 36215 NAs. The data dictionary states that the patient zip code will be blank (NA) for the following confidentiality reasons: zip code population size less than 20,000 people; abortion records; less than 10 records with that zip code.
 
 
-Severity AND Mortality.Risk each have 67 NAs, which also co-occur. Most of these records have no diganosis under the DRG column and they have a DRG.Code greater than 952. This doesn't make sense, since the maximum DRG.Code used in New York State is 952. Thus, we assume these records had missing or invalid DRG.Codes. Since Severity and mortality.risk are derived from the DRG coding system as well, it makes sense that they would also be NAs. Also, (inexplicably), for all of these records, the CCS.Diagnosis corresponds to some type of birth that was not an abortion.
+Severity AND Mortality.Risk each have 67 NAs, which also co-occur. Most of these records have no diganosis under the DRG column and they have a DRG.Code greater than 952. This doesn't make sense, since the maximum DRG.Code used in New York State is 952. Thus, we assume these records had missing or invalid DRG Codes. Since Severity and mortality.risk are derived from the DRG coding system as well, it makes sense that they would also be NAs. Also, (inexplicably), for all of these records, the CCS.Diagnosis corresponds to some type of birth that was not an abortion.
 ```{r}
 # examine incomplete severity rows
 severity.incomplete <- incomplete[is.na(incomplete$Severity),]
@@ -92,18 +92,20 @@ hosp$DRG.Code <- ifelse(hosp$DRG.Code > 952, NA, hosp$DRG.Code)
 ```
 
 
-Payment2 has 834420 NAs. Payment3 has 1691076 NAs. These correspond to people that only had one payment type, so that makes sense and requires no further investigation.
+Payment2 has 834420 NAs. Payment3 has 1691076 NAs. These correspond to people that only had one or two payment types, respectively, so that makes sense and requires no further investigation.
 
 
 ## Change Invalid Values to NAs
-To identify invalid values, we look at their distributions (either a histogram for quantitative variables or bar plots for categorical variables). 
+To identify invalid values in each of our variables, we look at their distributions (either a histogram for quantitative variables or bar plots for categorical variables). 
 ```{r}
 # examine birthweight plot for strange values
 ggplot(hosp, aes(x=Birthweight)) +
   geom_histogram() + 
-  ggtitle("Distribution of Birthweight (g)")
+  ggtitle("Distribution of Birthweight (g)") +
+  ylab("Number of Admissions") +
+  xlab("Birthweight (g)")
 ```
-We see that there are a large number of 0s for birthweight, which indicates that the record does not correspond to a pregnancy/birth. We replace all 0s with NAs, reexamine the birthweight plot, and see that it appears normal (as expected)
+We see that there are a large number of 0s for birthweight, which indicates that the record does not correspond to a pregnancy/birth. We replace all 0s with "Not a birth", reexamine the birthweight plot, and see that it appears normal (as expected)
 
 ```{r}
 hosp$Birthweight <- ifelse(hosp$Birthweight==0, NA, hosp$Birthweight)
@@ -111,69 +113,92 @@ hosp$Birthweight <- ifelse(hosp$Birthweight==0, NA, hosp$Birthweight)
 # reexamine birthweight plot
 ggplot(hosp, aes(x=Birthweight)) +
   geom_histogram() + 
-  ggtitle("Distribution of Birthweight (g)")
-# none of the birthweights appear abnormal.
+  ggtitle("Distribution of Birthweight (g)") +
+  xlab("Birthweight (g)") +
+  ylab("Number of Admissions")
+# none of the birthweights appear abnormal (they do follow a normal distribution)
 ```
 
-Repeat for gender, and replace all 57 "unknown" genders with NAs. 
+Repeat for gender, and replace all 57 "U" genders with "Unknown".  
 ```{r}
 # examine gender plot for unusual values
 ggplot(hosp, aes(x=Gender)) + 
   geom_bar(stat="count") +
-  ggtitle("Distribution of Gender")
-# replace all "unknown" genders with NA
+  ggtitle("Distribution of Gender") +
+  xlab("Gender") +
+  ylab("Number of Admissions")
+# replace all "U" genders with "Unknown"
 sum(hosp$Gender == "U") # only 57 records with unknown gender.
-hosp$Gender <- ifelse(hosp$Gender=="U", NA, hosp$Gender)
+hosp$Gender <- ifelse(hosp$Gender=="U", "Unknown", hosp$Gender)
 ```
 
-Repeat for ethnicity, and replace all 97,180 "unknown" ethnicities with NAs.
+Repeat for ethnicity, and keep all 97,000+ "unknown" ethnicities. 
 ```{r}
 # examine ethnicity plot for unusual values
 ggplot(hosp, aes(x=Ethnicity)) + 
   geom_bar(stat="count") +
-  ggtitle("Distribution of Ethnicity")
-# replace all "unknown" ethnicities with NA
+  ggtitle("Distribution of Ethnicity") +
+  xlab("Ethnicity") +
+  ylab("Number of Admissions")
+# look at number of unknown ethnicities
 sum(hosp$Ethnicity == "Unknown") # 97,180 records with Unknown ethnicities
-hosp$Ethnicity <- ifelse(hosp$Ethnicity=="Unknown", NA, hosp$Ethnicity)
 ```
 
-Repeat for surgical, and replace all 67 "Not Applicable" entries with NAs
+Repeat for surgical, and replace all 67 "Not Applicable" entries with "Unknown"
 ```{r}
 # examine categories
 ggplot(hosp, aes(x=Surgical)) + 
   geom_bar(stat="count") +
-  ggtitle("Distribution of Surgical Category")
-# replace surgical "Not Applicable" entries with NA
+  ggtitle("Distribution of Surgical Category") +
+  xlab("Surgical Category") +
+  ylab("Number of Admissions")
+# replace surgical "Not Applicable" entries with "Unknown"
 sum(hosp$Surgical == "Not Applicable") # 67 Surgery "Not Applicable"s
-hosp$Surgical <- ifelse(hosp$Surgical=="Not Applicable", NA, hosp$Surgical)
+hosp$Surgical <- ifelse(hosp$Surgical=="Not Applicable", "Unknown", hosp$Surgical)
 ```
 
-Repeat for Type of admission
+Repeat for Type of Admission, and replace any Unavailable values with "Unknown"
 ```{r}
+ggplot(hosp, aes(x=Type)) + 
+  geom_bar(stat="count") +
+  ggtitle("Distribution of Type of Admission") +
+  xlab("Type of Admission") +
+  ylab("Number of Admissions")
 sum(hosp$Type=="Not Available") # 435 of these rows
-hosp$Type <- ifelse(hosp$Type == "Not Available", NA, hosp$Type)
+hosp$Type <- ifelse(hosp$Type == "Not Available", "Unknown", hosp$Type)
 ```
 
-Repeat for discharge status.
+Repeat for discharge status, and replace unavailable values with "Unknown."
 ```{r}
-sum(hosp$Discharge.Status=="Another Type Not Listed")
-hosp$Discharge.Status <- ifelse(hosp$Discharge.Status=="Another Type Not Listed", NA, hosp$Discharge.Status)
+ggplot(hosp, aes(x=Discharge.Status)) + 
+  geom_bar(stat="count") +
+  ggtitle("Distribution of Discharge Status") +
+  xlab("Type of Discharge Status") +
+  ylab("Number of Admissions") +
+  theme(axis.text.x = element_text(angle=90, vjust=.5)) +
+  scale_x_discrete(label=function(x) abbreviate(x, minlength=22))
+
+sum(hosp$Discharge.Status=="Another Type Not Listed") #6976 "Another Type"s
+hosp$Discharge.Status <- ifelse(hosp$Discharge.Status=="Another Type Not Listed", 
+                                "Another Type", hosp$Discharge.Status)
 ```
 
-Repeat for CCS code. From the distribution, we see that categories above 650-63 and 670 represent MHSA coding (mental health codes). 917 stands for unclassified E code and 999 is ungroupable, which we will recode as NAs
+Repeat for CCS code. From the distribution, we see that categories above 650-663 and 670 represent MHSA coding (mental health codes). 917 stands for unclassified E code and 999 is ungroupable, which we will recode as NAs
 ```{r}
-ggplot(hosp, aes(x=CCS.Code)) + geom_histogram()
-table(hosp$CCS.Code[hosp$CCS.Code > 260])
+ggplot(hosp, aes(x=CCS.Code)) + 
+  geom_histogram() +
+  ggtitle("Distribution of CCS Codes") +
+  xlab("CCS Code") +
+  ylab("Number of Admissions")
 
 #recode as NAs  
 hosp$CCS.Code <- ifelse(hosp$CCS.Code==999, NA, hosp$CCS.Code)
 ```
 
-Repeat for payment1, replace all 6,896 "Unknowns" with NAs. Note that we are not replacing payment2 or payment3 "Unknown" with NA because currently, NA stands for "there was not a second/third payment type" and we don't want to combine these records. Perhaps (although doubtedly) the unknown category has predictive value and should be kept separate from the other NAs. 
+Repeat for payment1. We will keep the 6,896 "Unknowns." Note that we are not replacing payment2 or payment3 "Unknown" with NA because currently, NA stands for "there was not a second/third payment type" and we don't want to combine these records. Perhaps the unknown category has predictive value and should be kept separate from the other NAs. 
 ```{r}
 # replace payment1 "Unknown" with NA
 sum(hosp$Payment1 == "Unknown") #6896 Payment1 "Unknown"
-hosp$Payment1 <- ifelse(hosp$Payment1=="Unknown", NA, hosp$Payment1)
 ```
 
 ## Examine Distributions of Variables
@@ -181,18 +206,55 @@ Next, we examine the distributions of our variables to get an idea of whether th
 ```{r examine distributions}
 ggplot(hosp, aes(x=Area)) + 
   geom_bar(stat="count") + 
-  theme(axis.text.x = element_text(angle = 45, size=8)) +
-  ggtitle("Distribution of Hospital Service Area")
-# has an NA category, distribution looks appropriate
-
-ggplot(hosp, aes(x=County)) + 
-  geom_bar(stat="count") +
-  theme(axis.text.x = element_text(angle = 90, size=8, vjust=0.2)) +
-  ggtitle("Distribution of County")
-# has an NA category, distribution looks appropriate
+  theme(axis.text.x = element_text(angle = 45, size=8, vjust=.8)) +
+  ggtitle("Distribution of Admissions by Hospital Service Area") +
+  xlab("Area") +
+  ylab("Number of Admissions")
 ```
+This plot looks appropriate, and shows that most admissions come from New York City.
 
-We examine how cerficate compares to facility.name and facility.ID (are they redundant?).
+Next, we examine the distribution of county, adding in population data to see if the percent of total admissions for a county matches the percent of NY state population for each county. (We would expect that they should be close to eachother, if not equal.)
+```{r}
+# get percent of admissions by county
+hosp %>%
+  count(County) %>%
+  mutate(perc = n/ nrow(hosp)) -> hosp2
+
+# load in new york population data
+ashley4 <- "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/county-pops.csv"
+countypops <- read.csv(ashley4, header=T)
+
+# left outer join of % admissions (hosp2) and population data (countypops) per county
+hosp3 <- merge(hosp2, countypops, by="County", all=T)
+
+# graph admissions by county with new york population data.
+mycolors <- c("Number of Admissions" = mygreen, 
+               "Population" = mypurple)
+
+ggplot(hosp3, aes(x=reorder(County, -n), y=perc)) + 
+  geom_bar(aes(fill="Number of Admissions"), stat="identity", alpha=.5) +
+  geom_bar(aes(y=prop.of.NY, fill="Population"), 
+             stat="identity", alpha=.5) +
+  # geom_point(aes(y=prop.of.NY, fill="Population", color="Population"), 
+  #            shape=21, stat="identity", alpha=.5) +
+  theme(axis.text.x = element_text(angle = 90, size=8, vjust=0.2),
+        legend.position=c(.8,.8),
+        legend.background = element_rect(fill="white", color="grey")) +
+  scale_fill_manual(name=NULL, values=mycolors, 
+    labels=c("Admissions \n (% of Total)", "Population \n (% of NY State Total)"),
+    aesthetics=c("fill", "color")) +
+  ggtitle("Percent of Admissions by County, compared to \n Percent of NY Population by County") +
+  xlab("County") +
+  ylab("Number (% of Total)") +
+  scale_y_continuous(labels=scales::percent)
+```
+From the above graph, we see that the green bar represents the percent of our dataset's total admissions that come from each county. The light purple bar shows the population of each county, represented as a percent of NY state's total population. Since our dataset ideally represents all of New York state, we would expect the two percentages to be equal (in the absence of any other influential factors). However, we see that some counties (notably, Manhattan, Nassau, Monroe, Onondaga, and Albany) disproportionately represent higher hospital admissions than their population numbers would predict. On the other hand, Kings, Queens, and Saratoga counties represent less of all hospital admissions than would be expected by their populations. 
+
+This could indicate disproportionate usage of the healthcare system by some counties over others. However, it could also indicate problems in the collection of our dataset (e.g., perhaps most hospitals sampled were in Manhattan and not evenly spread across all counties). 
+
+
+
+Next, we examine how cerficate compares to facility.name and facility.ID (are they redundant?).
 ```{r}
 name <- list()
 id <- list()
@@ -252,6 +314,18 @@ ggplot(y, aes(x=as.numeric(Duration), y=count)) +
   ggtitle("Distribution of Duration of Hospital Stay")
 ```
 Here we see that the vast majority of Hospital durations are less than 10 days. Also, the one row that was removed was "120+" bc it is not easily coerced to numeric. We know a priori from the data dictionary that this categorization of duration stands for any duration greater than 120 days.
+
+## Examine Predictors of Charges
+```{r}
+ggplot(hosp, aes(x=Area, y=Charges)) +
+  geom_boxplot() +
+  coord_cartesian(ylim=c(0, 150000)) +
+  ggtitle("Distribution of Charges based on Hospital Service Area") +
+  theme(axis.text.x = element_text(angle = 45, size=8, vjust=.8)) +
+  xlab("Area") +
+  ylab("Charges ($)") +
+  geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1)
+```
 
 ## Create indicator variables
 For all values replaced with NAs or other abnormalities noted above, we will create indicator variables in case there is systematic missingness.
@@ -538,7 +612,8 @@ factorize <- function(x) {
   hosp[[x]] <<- as.factor(hosp[[x]])
 }
 sapply(colnames(hosp)[factor.index], function(x) {
-  hosp[,factor.index][x] <<- factorize)
+  hosp[,factor.index][x] <<- factorize
+})
 
 
 samp <- hosp[sample(1:nrow(hosp), 10000),]

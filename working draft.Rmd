@@ -56,7 +56,13 @@ colnames(hosp) <- c("Area", "County", "Certificate", "Facility.ID", "Facility.Na
 unique(hosp$Discharge.Year)
 # get rid of discharge.year 
 hosp <- hosp[,-which(colnames(hosp)=="Discharge.Year")]
+
+hosp$DRG[1:20]
 ```
+
+## Introduction
+
+## Data Summary
 
 ## Examine Existing NAs
 Then, we examine existing NAs. We see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. Please note that in any cases where we think there could be systematic missingness in categorical variables, we are keeping the variables as "unknown" or "not applicable" rather than recoding them as NAs. This is because randomForest removes any rows with NAs or forces you to impute them; instead, we'd like to keep them as a separate grouping. For continuous variables, we are recoding them as NAs to avoid introducing strings into a numeric variable.
@@ -76,9 +82,12 @@ sapply(1:ncol(incomplete), function(x) {
 names(nas) <- colnames(incomplete)
 nas # shows the number of NAs in each column
 ```
-Area, County, Certificate, and Facility.ID have 5325 instances of NAs. They all co-occur (an NA in one of these variables corresponds to an NA in the others as well). We also see that the Facility.Name variable is always "Redacted for Confidentiality" for these instances. Presumably, this is the reason that all the location information is NAs for these records.
+Area, County, Certificate, and Facility.ID have 5325 instances of NAs. They all co-occur (an NA in one of these variables corresponds to an NA in the others as well). We also see that the Facility.Name variable is always "Redacted for Confidentiality" for these instances and Severity.Code is 0. Presumably, this is the reason that all the location information is NAs for these records. We will replace the corresponding Severity Codes with NAs and later create an indicator variable for these rows.
 ```{r}
+# look at facility name for these redacted rows
 unique(incomplete[is.na(incomplete$Area),]$Facility.Name)
+# 0s don't make sense for Severity.Code and correspond to the redacted rows, replace with NAs
+hosp$Severity.Code <- ifelse(hosp$Severity.Code==0, NA, hosp$Severity.Code)
 ```
 Zipcode has 36215 NAs. The data dictionary states that the patient zip code will be blank (NA) for the following confidentiality reasons: zip code population size less than 20,000 people; abortion records; less than 10 records with that zip code.
 
@@ -120,6 +129,35 @@ ggplot(hosp, aes(x=Birthweight)) +
   xlab("Birthweight (g)") +
   ylab("Number of Admissions")
 # none of the birthweights appear abnormal (they do follow a normal distribution)
+```
+
+Next, we look at the distribution of CCS Procedure Code. The highest CCS Procedure Code used is 231, but the highest code in our dataset is 999, which corresponds to "Ungroupable" procedures. We will make those procedures NAs. Also, a procedure code of 0 corresponds to "No procedure", which we will later make an indicator variable for.
+```{r}
+# examine distribution of CCS procedure code
+ggplot(hosp, aes(x=CCS.Procedure.Code)) + 
+  geom_histogram() +
+  ggtitle("Distribution of CCS Procedure Codes") + 
+  xlab("CCS Procedure Code") +
+  ylab("Number of Admissions")
+
+unique(hosp[hosp$CCS.Procedure.Code>231, "CCS.Procedure.Code"])
+# the highest CCS Procedure code in our dataset is 999. We will make those NAs. 
+hosp$CCS.Procedure.Code <- ifelse(hosp$CCS.Procedure.Code==999, NA, hosp$CCS.Procedure.Code)
+# show procedure code = 0
+hosp[hosp$CCS.Procedure.Code==0, c("CCS.Procedure.Code", "CCS.Procedure")][1,]
+```
+
+We also see that there are 14 rows with an MDC code of 0, corresponding to the category "Pre-MDC or Ungroupable." We replace these values with NAs. 
+```{r}
+nrow(hosp[hosp$MDC.Code==0,]) # 14 rows have MDC.code=0
+# replace with NAs
+hosp$MDC.Code <- ifelse(hosp$MDC.Code==0, NA, hosp$MDC.Code)
+```
+
+Also, we change the one invalid numeric value in Duration to a numeric value (120+ to 120). 
+```{r}
+hosp$Duration <- ifelse(hosp$Duration == "120 +", 120, hosp$Duration)
+hosp$Duration <- as.numeric(hosp$Duration)
 ```
 
 Repeat for gender, and replace all 57 "U" genders with "Unknown".  
@@ -320,7 +358,26 @@ ggplot(y, aes(x=as.numeric(Duration), y=count)) +
 ```
 Here we see that the vast majority of Hospital durations are less than 10 days. Also, the one row that was removed was "120+" bc it is not easily coerced to numeric. We know a priori from the data dictionary that this categorization of duration stands for any duration greater than 120 days.
 
-## Examine Predictors of Charges
+
+Finally, we look at the correlations of our numeric variables with eachother.
+```{r}
+library(corrplot)
+hosp$Duration <- as.numeric(hosp$Duration)
+# get numeric columns
+num <- hosp[,c("Duration", "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "Severity.Code", "Birthweight", "Charges", "Costs")]
+
+# get corrplot
+x <- cor(num[complete.cases(num)==T,]); corrplot(x)
+```
+From the corrplot, we see that DRG Code and MDC Code are highly correlated. This is surprising, considering that there are only 26 MDC codes which correspond to organ systems, while there are 300+ DRG Codes that represent specific diseases. We also see that there is a moderate positive correlation between severity code and duration, which makes sense since severity code is on a 1-4 scale with 4 being extremely severe. Also, there is a moderate negative correalation between birthweight and duration (again as expected, these likely represent premature babies that required more care). There is a strong positive correlation between charges and duration, as well as costs with duration and costs with charges. Finally, there is a weak negative correlation between birthweight and severity code (smaller babies have higher severity codes), a weak positive correlation of severity code with costs and severity code with charges (more severe cases cost the hospital more to treat, which is passed on to the patient), and a weak negative association between birthweight and charges/costs.
+
+ I am surprised to see the significance that birthweight has as a predictor for our other variables. Specifically, we can draw some preliminary conclusions: the lower the birthweight, the higher the duration, the higher the severity code, and the higher the charges/costs.
+
+
+
+## Examine Potential Predictors of Charges
+We have chosen to predict charges (cost charged to the patient) using the demographic and medical information in our dataset. To see how our predictors are correlated with this response variable (if at all), we examine graphs of boxplots for each predictor.
+
 ```{r}
 ggplot(hosp, aes(x=Age, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
@@ -344,6 +401,28 @@ ggplot(hosp, aes(x=Age, y=Charges, fill=factor(Gender, levels=c("M", "F", "Unkno
   ylab("Charges ($)")
 ```
 Here, we see that charges don't tend to change that much between males and females. The distribution is more spread for males (a higher upper whisker can be seen in all age groups), indicating more variability; however, the medians are not different from those of females. We do see that the "Unknown" gender distribution is different from that of males and females, with either markedly increased or decreased variability (as measured by the IQR). This is likely because there were only 57 Unknown gender records. Thus, we expect Gender (especially its Unknown level) to be somewhat predictive of Charges.
+
+```{r}
+# charges vs. race
+ggplot(hosp, aes(x=Race, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,150000)) +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.") +
+  ggtitle("Distribution of Charges based on Race") +
+  xlab("Race") +
+  ylab("Charges ($)")
+
+# charges vs. ethnicity
+ggplot(hosp, aes(x=Ethnicity, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,150000)) +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.") +
+  ggtitle("Distribution of Charges based on Ethnicity") +
+  xlab("Ethnicity") +
+  ylab("Charges ($)")
+```
+Here, we see that the distribution of charges does not change much across different races or across different Ethnicities, so we would not expect Race or Ethnicity to be a good predictor of Charges.
+
 
 ```{r}
 ggplot(hosp, aes(x=Area, y=Charges)) +
@@ -387,6 +466,80 @@ ggplot(filter(hosp, County=="Manhattan"), aes(x=Age, y=..prop.., group=1)) +
 ```
 Here, we see that Manhattan County's age distribution (shown in green) is actually shifted left compared to the age distribution of NY state (the whole dataset, shown in light purple). This means that Manhattan actually sees less patients that are on average younger than most other hospitals in the state. Thus, the hypothesis that Manhattan has higher median charges because it treats older patients seems untrue.
 
+```{r}
+ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,250000)) +
+  xlab("MDC Code") +
+  ylab("Charges ($)") +
+  ggtitle("Comparison of the Distribution of Charges between MDC Codes") +
+  scale_x_discrete(limits=c("8", "14", "15", "17", "18", "20", "22", "25")) +
+  geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1) +
+  labs(caption="Only MDC codes with noticeably different distributions from the norm are shown. \n Also, the y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.")
+```
+Here, we can see that diseases of certain body systems are associated with higher or lower median charges. MDC codes 8, 17, 18, 22, and 25 (respectively: Musculoskeletal, myeloproliferative, infectious disease, burns, and multiple significant trauma) have higher median charges, as expected. MDC codes 14, 15, and 20 (respectively: pregnancy/childbirth, newborn, and alcohol/drug use) have lower median charges and lower variations. 
+
+```{r}
+# for pregnancies: charges vs. age groups
+ggplot(filter(hosp, MDC.Code==14), aes(x=Age, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,80000)) +
+  xlab("Age Group of Patient") +
+  ylab("Charges ($)") +
+  ggtitle("For Pregnancies/Childbirths: Comparison of the Distribution of Charges \n between Age Groups") +
+  geom_hline(yintercept=median(filter(hosp, MDC.Code==14)$Charges), color="navy blue", linetype="dashed", size=1) +
+  labs(caption="The y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.")
+
+# for pregnancies: duration vs. age groups
+ggplot(filter(hosp, MDC.Code==14), aes(x=Age, y=as.numeric(Duration))) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,6)) +
+  xlab("Age Group of Patient") +
+  ylab("Duration (days)") +
+  ggtitle("For Pregnancies/Childbirths: Comparison of the Distribution of Duration \n between Age Groups") +
+    geom_hline(yintercept=median(as.numeric(filter(hosp, MDC.Code==14)$Duration), na.rm=T), color="navy blue", linetype="dashed", size=1) +
+  labs(caption="The y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.")
+```
+In the first graph, we see that older patients tend to have more expensive pregnancies/childbirths (as expected). The dark blue line represents the median charge of all pregnancies (MDC code=14). In the second graph, we see a possible explanation for this trend: older patients have longer admission durations, which is correlated with increased charges. The dark blue line represents the median duration of all pregnancies.
+
+```{r}
+ggplot(hosp, aes(x=Type, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0, 150000)) +
+  ggtitle("Comparison of Charges across Admission Types") +
+  xlab("Admission Type") +
+  ylab("Charges ($)") +
+  labs(caption="The y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.") +
+  geom_hline(yintercept=median(hosp$Charges), size=1, color="navy blue", linetype="dashed")
+```
+This graph shows that Trauma admissions have higher charges, while Newborn admissions have lower charges (both as expected).
+
+```{r}
+ggplot(hosp, aes(x=reorder(Discharge.Status, -Charges), y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0, 200000)) +
+  ggtitle("Comparison of Charges across Discharge Statuses") +
+  xlab("Discharge Status") +
+  ylab("Charges ($)") +
+  labs(caption="The y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.") +
+  geom_hline(yintercept=median(hosp$Charges), size=1, color="navy blue", linetype="dashed") +
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) +
+  scale_x_discrete(labels=c("Medicare Longterm Hosptl", "Cancer/Children's Hosptl",
+                            "Medicaid Nursing Facility", "Expired", "Inpatient Rehab",
+                            "Hospice in Medical Facility", "Nursing Home", "Hospice at Home",
+                            "Home w/ Health Services", "Federal Medical Facility",
+                            "Shortterm Hospital", "Another Type", "Law Enforcement", 
+                            "Facility w/ Supportive Care", "Psychiatric Hosptl",
+                            "Critical Access Hospital", "Self Care", "Hospital w/ Swing Bed",
+                            "Left Against Advice"))
+  
+```
+Here, we see that Discharge Status does seem to have predictive value for Charges. Patients that were discharged to a longterm hospital, a nursing home, inpatient rehab, or hospice have higher median charges compared to those that were discharged to shortterm hospitals, supportive care, or self-care. This makes sense, as the former discharge locations would likely correspond to older patients or those with more serious conditions. Also, we note that "Expired" patients (those that died at the hospital) also have higher median charges.
+
+
+```{r}
+```
+
 
 ## Create indicator variables
 For all values replaced with NAs or other abnormalities noted above, we will create indicator variables in case there is systematic missingness.
@@ -415,48 +568,10 @@ hosp <- hosp %>%
 
 
 # Test Center
+
 ```{r}
-ggplot(hosp, aes(x=Type)) + geom_bar(stat="count")
-ggplot(hosp, aes(x=Discharge.Status)) + geom_bar(stat="count") + theme(axis.text.x = element_text(angle=90))
-
-
-
-# THIS STILL NEEDS TO BE ADDED IN 
-ggplot(hosp, aes(x=CCS.Procedure.Code)) + geom_histogram()
-# the highest CCS Procedure code is 231. 
-unique(hosp[hosp$CCS.Procedure.Code>231, "CCS.Procedure.Code"])
-# all the records greater than 231 are coded 999 for ungroupable, so we will make those NAs.
-hosp$CCS.Procedure.Code <- ifelse(hosp$CCS.Procedure.Code==999, NA, hosp$CCS.Procedure.Code)
-# there are also 0s in the procedure code, which correponds to no procedure performed. we will create an indicator variable for those later.
-hosp[hosp$CCS.Procedure.Code==0, c("CCS.Procedure.Code", "CCS.Procedure")][1,]
-
-
 # ADD IN
-hosp$Duration <- ifelse(hosp$Duration == "120 +", 120, hosp$Duration)
-hosp$Duration <- as.numeric(hosp$Duration)
 
-
-# ADD IN
-# 0s don't make sense for Severity.Code and correspond to the redacted rows. 
-hosp$Severity.Code <- ifelse(hosp$Severity.Code==0, NA, hosp$Severity.Code)
-
-
-# ADD IN
-nrow(hosp[hosp$MDC.Code==0,]) 
-# 14 rows correspond to an MDC.Code of 0, representing an MDC of "Pre-MDC or Ungroupable". We will recode those MDC.codes as NAs.
-hosp$MDC.Code <- ifelse(hosp$MDC.Code==0, NA, hosp$MDC.Code)
-
-
-
-library(corrplot)
-hosp$Duration <- as.numeric(hosp$Duration)
-num <- hosp[,c("Duration", "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "Severity.Code", "Birthweight", "Charges", "Costs")]
-
-x <- cor(num[complete.cases(num)==T,])
-corrplot(x)
-# from the corrplot, we see that DRG.Code and MDC.Code are highly correlated. This is surprising, considering that there are only 26 MDC codes which correspond to organ systems, while there are 300+ DRG Codes that represent specific diseases. We also see that there is a moderate positive correlation between Severity.Code and Duration, which makes sense since Severity.Code is on a 1-4 scale with 4 being extremely severe. Also, there is a moderate negative correalation between birthweight and Duration (again as expected, these likely represent premature babies). There is a strong positive correlation between charges and duration, as well as costs with duration and costs with charges. Finally, there is a weak negative correlation between birthweight and severity.code, a weak postivie correlation of severity.code with costs and severity.code with charges, and a weak negative association between birthweight and charges/costs.
-
-# I am surprised to see the signifcance that birthweight has as a predictor for our other variables. Specifically, we can draw some preliminary conclusions: the lower the birthweight, the higher the duration, the higher the severity.code, and the higher the charges/costs.
 births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),]
 
 ggplot(births[!is.na(births$Severity.Code),], aes(
@@ -506,15 +621,7 @@ ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
 
 # just show a couple and show the median. 
 colnames(hosp)
-ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
-  geom_boxplot(outlier.shape=NA) +
-  coord_cartesian(ylim=c(0,250000)) +
-  xlab("MDC Code") +
-  ylab("Charges ($)") +
-  #ggtitle("Comparison of the Distribution of Charges between MDC Codes") +
-  scale_x_discrete(limits=c("8", "14", "15", "17", "18", "20", "22", "25")) +
-  geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1) +
-  theme(plot.title = element_text(color="navy blue"))
+
 
   
 hosp %>%

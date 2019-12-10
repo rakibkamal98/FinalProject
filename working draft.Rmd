@@ -23,6 +23,9 @@ theme_set(theme_minimal())
 # colors used for plotting
 mygreen <- "#22908C"
 mypurple <- "#450D54"
+
+mycolors <- c("Number of Admissions" = mygreen, 
+               "Population" = mypurple)
 ```
 
 ## Read in Data
@@ -271,6 +274,7 @@ x$name[c(1:10)]
 ```
 From this, we see that there are multiple hospital names for the same certificate number, but they are typically different campuses of the same main hospital (e.g. "Albany Medical Center Hospital" and "Albany Medical Center - South Clinical Campus"). The facility ID corresponds to these campus differences. So we assume that in our classification tasks, we will not use certificate or facility.name, we'll just use facility.ID because it encapsulates the former two variables.
 
+
 ```{r}
 # examine distribution of facility ID
 ggplot(hosp, aes(x=Facility.ID)) + 
@@ -294,9 +298,10 @@ hosp <- hosp[,-which(colnames(hosp) %in% c("Certificate", "Facility.Name"))]
 
 Next, we examine a distribution of age groups.
 ```{r}
-ggplot(hosp, aes(x=Age)) + 
-  geom_bar(stat="count") +
-  ggtitle("Distribution of Age Group")
+ggplot(hosp, aes(x=Age, y=..prop.., group=1)) + 
+  geom_bar() +
+  ggtitle("Distribution of Age Group") +
+  scale_y_continuous(labels=scales::percent)
 ```
 This appears normal, no NAs. Age groups 50-69, and 70+ have the highest amount of hospital discharge records, which is consistent with what is expected.
 
@@ -317,15 +322,71 @@ Here we see that the vast majority of Hospital durations are less than 10 days. 
 
 ## Examine Predictors of Charges
 ```{r}
+ggplot(hosp, aes(x=Age, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0, 150000)) +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.") +
+  ggtitle("Distribution of Charges compared across Age Groups") +
+  xlab("Age Group of Patient") +
+  ylab("Charges ($)")
+```
+The above graph shows what one would generally expect: the older the patient, the higher the charges (end-of-life care is expensive and prolonged).
+
+```{r}
+ggplot(hosp, aes(x=Age, y=Charges, fill=factor(Gender, levels=c("M", "F", "Unknown")))) +
+  geom_boxplot(outlier.shape=NA, color="grey62") +
+  coord_cartesian(ylim=c(0, 150000)) +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.", fill="Gender") +
+  ggtitle("Distribution of Charges compared across Age Groups") +
+  scale_fill_viridis_d(labels=c("Male", "Female", "Unknown")) +
+  theme(legend.position=c(.12, .80), legend.background=element_rect(fill="white", color="grey"))
+  xlab("Age Group of Patient") +
+  ylab("Charges ($)")
+```
+Here, we see that charges don't tend to change that much between males and females. The distribution is more spread for males (a higher upper whisker can be seen in all age groups), indicating more variability; however, the medians are not different from those of females. We do see that the "Unknown" gender distribution is different from that of males and females, with either markedly increased or decreased variability (as measured by the IQR). This is likely because there were only 57 Unknown gender records. Thus, we expect Gender (especially its Unknown level) to be somewhat predictive of Charges.
+
+```{r}
 ggplot(hosp, aes(x=Area, y=Charges)) +
-  geom_boxplot() +
+  geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 150000)) +
   ggtitle("Distribution of Charges based on Hospital Service Area") +
   theme(axis.text.x = element_text(angle = 45, size=8, vjust=.8)) +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.") +
   xlab("Area") +
   ylab("Charges ($)") +
   geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1)
 ```
+From this graph, we see that certain areas (Hudson Valley, Long Island, and NYC) have higher median charges (and overall distributions) than other areas. Thus, we would expect Area to be a good predictor of Charges.
+
+```{r}
+ggplot(hosp, aes(x=reorder(County, -Charges), y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0, 150000)) +
+  ggtitle("Distribution of Charges based on County") +
+  labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.") +
+  xlab("County") +
+  ylab("Charges ($)") +
+  theme(axis.text.x = element_text(angle = 90, size=8, vjust=0.2)) +
+  geom_hline(yintercept=median(hosp$Charges), size=1, color="blue", linetype="longdash")
+```
+Here, we see that Manhattan, Nassau, Westchester, Suffolk, and Rockland counties have the highest median charges. The first two of these counties also represent counties that were disproportionately represented in our dataset compared to their percent of the NY state population (see bar graph earlier in the report). I would hypothesize that hospitals in these counties are teaching hospitals or "the best"/highest funded in the state, which would both attract patients from other counties and attract rare/difficult cases that cost more to treat. Another explanation is that these counties treat older patients, which typically cost more to treat. We examine this explanation below for Manhattan County.
+
+```{r}
+mycolors2 <- c("Manhattan" = mygreen,
+               "Dataset" = mypurple)
+ggplot(filter(hosp, County=="Manhattan"), aes(x=Age, y=..prop.., group=1)) +
+  geom_bar(stat="count", aes(fill="Manhattan"), alpha=.5) +
+  scale_y_continuous(labels=scales::percent) +
+  geom_bar(data=hosp, aes(x=Age, y=..prop.., group=1, fill="Dataset"), alpha=.5) +
+  scale_fill_manual(name=NULL, values=mycolors2, aesthetics=c("fill", "color"), 
+                    labels=c("NY State \n (Whole Dataset)", "Manhattan County")) +
+  theme(legend.position=c(.15,.85), legend.background=element_rect(fill="white", color="grey")) +
+  ggtitle("Distribution of Age Group for Manhattan County compared to NY State") +
+  xlab("Age Group of Patient") +
+  ylab("Percent of Admissions")
+```
+Here, we see that Manhattan County's age distribution (shown in green) is actually shifted left compared to the age distribution of NY state (the whole dataset, shown in light purple). This means that Manhattan actually sees less patients that are on average younger than most other hospitals in the state. Thus, the hypothesis that Manhattan has higher median charges because it treats older patients seems untrue.
+
 
 ## Create indicator variables
 For all values replaced with NAs or other abnormalities noted above, we will create indicator variables in case there is systematic missingness.

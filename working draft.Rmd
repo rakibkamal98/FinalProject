@@ -56,8 +56,6 @@ colnames(hosp) <- c("Area", "County", "Certificate", "Facility.ID", "Facility.Na
 unique(hosp$Discharge.Year)
 # get rid of discharge.year 
 hosp <- hosp[,-which(colnames(hosp)=="Discharge.Year")]
-
-hosp$DRG[1:20]
 ```
 
 ## Introduction
@@ -769,14 +767,14 @@ county <- read.csv(ashley3)
 # left outer join with county data
 hosp <- merge(hosp, county, by="County", all=T)
 
+```
 
+
+
+
+```{r}
 # attempt to feature another var
 
-drgs <- hosp %>%
-  group_by(DRG.Code) %>%
-  summarise(
-    drg = paste(unique(DRG), collapse=";; ")
-  )
 
 # graph transplant vs. charges
 ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 
@@ -867,94 +865,231 @@ ggplot(hosp_temp, aes(x=as.factor(DRG.Code), y=Charges, fill=proc)) +
         legend.background=element_rect(fill="white", color="grey"),
         legend.title="Type of Cardiac Procedure")
 
-# graph vs. charges
-ggplot(filter(hosp, DRG.Code <=130 & DRG.Code >= 120), 
+# graph stomach/bowel procedures vs. charges
+ggplot(filter(hosp, (DRG.Code <=223 & DRG.Code >= 220) | DRG.Code==229), 
        aes(x=DRG, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
   coord_cartesian(ylim=c(0,400000)) +
   scale_y_continuous(labels=scales::comma) +
-  scale_x_discrete(labels=c("Major respiratory", "Other respiratory", "Respiratory diagnosis w/ ventilator 96+ hrs")) +
-  ggtitle("Distribution of Charges for Respiratory Procedures") +
+  theme(axis.text.x=element_text(angle=45, vjust=1, hjust=1)) +
+  scale_x_discrete(labels=c("Major bowel", "Major stomach/duodenal", 
+                            "Other digestive system", "Other bowel", "Other stomach/duodenal")) +
+  ggtitle("Distribution of Charges for Stomach/Bowel Procedures (excl. hernia)") +
   xlab("DRG") +
   ylab("Charges ($)")
 
-# create DRG vars
-hosp %>%
+# graph liver/abdominal procedures vs. charges
+ggplot(filter(hosp, (DRG.Code <=264 & DRG.Code >= 260)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,250000)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_discrete(labels=c("Gallbladder removal", "Gallbladder removal w/ laparoscope", 
+                            "Major biliary tract procedure", "Major pancreas/liver procedure",
+                            "Other liver/abdominal procedure")) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Liver/Abdominal Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph hip/knee/femur surgery vs. charges
+ggplot(filter(hosp, DRG.Code %in% c(301, 302, 308, 309)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,200000)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Hip/Knee/Femur Surgery") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph spinal fusions vs. charges
+ggplot(filter(hosp, DRG.Code %in% c(303, 304, 321)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,500000)) +
+  scale_x_discrete(labels=c("Cervical spinal fusion", 
+                            "Dorsal/lumbar fusion, not for back curvature", 
+                            "Dorsal/lumbar fusion, for back curvature")) +
+  theme(axis.text.x=element_text(angle=20, hjust=1, vjust=1)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Spinal Fusions") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph breast procedures vs. charges
+ggplot(filter(hosp, (DRG.Code <=363 & DRG.Code >= 362)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,175000)) +
+  theme(axis.text.x=element_text(angle=20, hjust=1, vjust=1)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Breast Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph kidney/urinary procedures vs. charges
+ggplot(filter(hosp, (DRG.Code <=447 & DRG.Code >= 441)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,300000)) +
+  scale_y_continuous(labels=scales::comma) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_discrete(labels=c("Kidney/urinary malignancy", 
+                            "Kidney/urinary nonmalignancy",
+                            "Major bladder",
+                            "Other bladder",
+                            "Other kidney/urinary",
+                            "Renal dialysis access device",
+                            "Urethral")) +
+  ggtitle("Distribution of Charges for Kidney/Urinary Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+
+# graph ostetric procedures/diagnoses vs. charges
+ggplot(filter(hosp, (DRG.Code <=566 & DRG.Code >= 540)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,75000)) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Abortion w/o D&C",
+                            "Caesarean delivery",
+                            "D&C",
+                            "Ectopic pregnancy",
+                            "False labor",
+                            "Other antepartum diagnosis",
+                            "Other antepartum procedure",
+                            "Postpartum diagnosis w/o procedure",
+                            "Preterm labor",
+                            "Vaginal delivery",
+                            "Vaginal delivery w/ complications",
+                            "Vaginal delivery w/ D&C")) +
+  ggtitle("Distribution of Charges for Obstetric Procedures/Diagnoses") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph spleen/blood procedures vs. charges
+ggplot(filter(hosp, (DRG.Code <=651 & DRG.Code >= 650)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,200000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Other spleen/blood procedure", "Splenectomy")) +
+  ggtitle("Distribution of Charges for Spleen/Blood Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph leukemia/radiotherapy vs. charges
+ggplot(filter(hosp, (DRG.Code <=692 & DRG.Code >= 690)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,750000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Acute leukemia","Lymphoma/Non-acute leukemia",
+                            "Radiotherapy")) +
+  ggtitle("Distribution of Charges for Leukemia/Radiotherapy") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph infection w/ OR procedure vs. charges
+ggplot(filter(hosp, (DRG.Code <=711 & DRG.Code >= 710)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,400000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Infectious disease w/ OR procedure", 
+                            "Post-op infection w/ OR procedure")) +
+  ggtitle("Distribution of Charges for Infection w/ OR Procedure") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph alcohol/drug abuse w/o rehab vs charges
+ggplot(filter(hosp, (DRG.Code <=776 & DRG.Code >= 773) | DRG.Code == 770), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,75000)) +
+  theme(axis.text.x=element_text(angle=20, hjust=1, vjust=1)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Alcohol abuse", "Cocaine abuse", 
+                            "Drug/alcohol abuse, left against advice", 
+                            "Opioid abuse", "Other drug abuse")) +
+  ggtitle("Distribution of Charges for Alcohol/Drug Abuse w/o Rehab") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph burns w/ skin graft vs. charges
+ggplot(filter(hosp, (DRG.Code <=842 & DRG.Code >= 841)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,1100000)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Burns with Skin Graft") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph rehab/aftercare vs. charges
+ggplot(filter(hosp, (DRG.Code %in% c(850, 860, 862, 863))), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,250000)) +
+  scale_x_discrete(labels=c("Neonatal", "Other", "Procedure w/ aftercare", "Rehab")) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Rehab/Aftercare") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph multiple significant trauma with procedure vs. charges
+ggplot(filter(hosp, (DRG.Code <=912 & DRG.Code >= 910)), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,500000)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Multiple Significant Trauma with Procedure") +
+  scale_x_discrete(labels=c("Craniotomy", "Abdominal/thoracic procedures", 
+                            "Musculoskeletal procedure")) +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# create DRG vars based off preceding graphs
+hosp <- hosp %>%
   mutate(drg.group = case_when(
     DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant",
-    DRG.Code < 40 & DRG.Code >=20 ~ "Nervous System Procedures"
+    DRG.Code < 40 & DRG.Code >=20 ~ "Nervous System Procedures",
     DRG.Code == 49 | DRG.Code == 50 ~ "Nervous System Infection (excl. meningitis)",
     DRG.Code >= 89 & DRG.Code <= 93 ~ "Head/Neck Procedures",
-    DRG.Code >= 120 & DRG.Code <= 130 ~ "Respiratory Procedures"
+    DRG.Code >= 120 & DRG.Code <= 130 ~ "Respiratory Procedures",
+    DRG.Code <= 223 & DRG.Code >= 220 ~ "Stomach/Bowel Procedures (excl. hernia)",
+    DRG.Code == 229 ~ "Stomach/Bowel Procedures (excl. hernia)",
+    DRG.Code <= 264 & DRG.Code >= 260 ~ "Liver/Abdominal Procedures",
+    DRG.Code %in% c(301, 302, 308, 309) ~ "Hip/Knee/Femur Surgery",
+    DRG.Code %in% c(303, 304, 321) ~ "Spinal Fusion",
+    DRG.Code %in% c(362, 363) ~ "Breast Procedures",
+    DRG.Code <= 447 & DRG.Code >= 441 ~ "Kidney/Urinary Procedures",
+    DRG.Code <=566 & DRG.Code >= 540 ~ "Obstetric Procedures/Diagnoses",
+    DRG.Code %in% c(650, 651) ~ "Spleen/Blood Procedures",
+    DRG.Code <=692 & DRG.Code >= 690 ~ "Leukemia/Radiotherapy",
+    DRG.Code <=711 & DRG.Code >= 710 ~ "Infection w/ OR Procedure",
+    (DRG.Code <=776 & DRG.Code >= 773) | DRG.Code == 770 ~ "Alcohol/Drug Abuse w/o Rehab",
+    DRG.Code <=842 & DRG.Code >= 841 ~ "Burns with Skin Graft",
+    DRG.Code %in% c(850, 860, 862, 863) ~ "Rehab/Aftercare",
+    DRG.Code <=912 & DRG.Code >= 910 ~ "Multiple Significant Trauma with Procedure",
+    TRUE ~ "Other"
   ))
 
 ```
-
-Test/Train split
-```{r}
-library(caret)
-library(tidyverse)
-set.seed(101)
-index <- sample(1:nrow(hosp), .8*nrow(hosp))
-
-# make character columns into factors
-hosp$Severity.Code <- as.factor(hosp$Severity.Code)
-hosp$Age <- as.factor(hosp$Age)
-hosp$Gender <- as.factor(hosp$Gender)
-hosp$Race <- as.factor(hosp$Race)
-hosp$Ethnicity <- as.factor(hosp$Ethnicity)
-
-num.index <- c()
-for (i in 1:length(colnames(num))) {
-  num.index[i] <- which(colnames(num)[i] == colnames(hosp))
-}
-factor.index <- (1:ncol(hosp))[-num.index]
-
-factorize <- function(x) {
-  hosp[[x]] <<- as.factor(hosp[[x]])
-}
-sapply(colnames(hosp)[factor.index], function(x) {
-  hosp[,factor.index][x] <<- factorize
-})
-
-
-samp <- hosp[sample(1:nrow(hosp), 10000),]
-
-train <- hosp[index,]
-test <- hosp[-index,]
-```
-
-Random Forest Model
-```{r}
-library(randomForest)
-library(tidyverse)
-
-
-features <- samp %>% 
-  select("Charges", "Costs", "Duration", "Severity.Code", 
-         "Age", "Gender", "Race", "Ethnicity", "Zip", "Area", "Type", "Discharge.Status",
-         "CCS.Code", "CCS.Procedure.Code", "DRG.Code", "MDC.Code", "MDC", "Mortality.Risk",
-         "Surgical", "Payment1", "Payment2", "Payment3", "Abortion", "ED",
-         "redacted", "na.zip", "invalid.drg", "na.payment1", "no.payment2", "birthweight.cat",
-         "if.birth")
-
-uniques <- sapply(apply(hosp, 2, unique), length)
-uniques
-uniques.samp <- sapply(apply(samp, 2, unique), length)
-uniques.samp
-
-
-apply(apply(features, 2, is.na), 2, sum)
-
-fit <- randomForest(formula=Charges~., 
-                    data=features,
-                    ntree=50,
-                    importance=T,
-                    na.action=na.omit)
-fit
-library(caret)
-varImp(fit)
-varImpPlot(fit, type=2)
-```
-

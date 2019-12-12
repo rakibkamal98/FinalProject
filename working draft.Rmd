@@ -625,11 +625,11 @@ We also created a feature called charge ratio, defined as the total charges (amo
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
 ggplot(hosp, aes(x=Charges, y=Costs)) + 
-  geom_point(alpha=.3)
+  geom_point(alpha=.3) +
+  ggtitle("Charges as a function of Costs") +
+  xlab("Charges ($)") +
+  ylab("Costs ($)")
 
-ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram() +
-  xlim(0, 1) # cut out outliers
 
 ggplot(hosp, aes(x=chargeratio)) +
   geom_histogram(bins=15, fill="white", color="black") +
@@ -685,9 +685,10 @@ filtered <- filter(temptemptemptemp, round(chargeratio, digits=6)==.659944)
 table(filtered$CCS.Code) # most are code 131: respiratory failure
 table(filtered$CCS.Procedure.Code) # most are code 216: resp intub/mech ventil
 table(filtered$DRG.Code) # most are 130 or 133: resp system w/ ventilator support 96+ hours OR respiratory failure. 
-table(filtered$Surgical) # all medical severity
+table(filtered$Surgical) # all medical 
 table(filtered$Payment1) # almost all are Medicaid or Medicare
-table(filtered$Facility.ID)
+table(filtered$Facility.ID) # all Facility.ID=1486
+hosp_og[hosp_og$Facility.Id == 1486 & !is.na(hosp_og$Facility.Id),c("Facility.Id", "Facility.Name")][1,] # this facility ID corresponds to the Henry J. Carter Specialty Hospital
 ```
 
 

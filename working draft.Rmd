@@ -661,19 +661,6 @@ ggplot(hosp, aes(x=chargeratio)) +
   geom_histogram() +
   xlim(0, 20) # cut out outliers
 
-sapply(1:25, function(x) {
-ggplot(filter(hosp, MDC.Code==13), aes(x=chargeratio)) +
-  geom_histogram(bins=15, fill="white", color="black") +
-  xlim(0,10) +
-  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
-  xlab("Ratio of Charges to Costs") +
-  ylab("Number of Admissions") +
-  #ggtitle("Distribution of Charge Ratio") +
-  scale_y_continuous(labels=scales::comma) +
-  facet_wrap(MDC.Code~.)
-})
-# This distribution is obviously right-skewed, with a median of around 2. 
-# note removal of rows with 0 cost are being removed.
 
 ggplot(hosp, aes(x=chargeratio)) +
   geom_histogram(bins=15, fill="white", color="black") +
@@ -683,16 +670,9 @@ ggplot(hosp, aes(x=chargeratio)) +
   ylab("Number of Admissions") +
   #ggtitle("Distribution of Charge Ratio") +
   scale_y_continuous(labels=scales::comma)
+# This distribution is obviously right-skewed, with a median of around 2. 
+# note removal of rows with 0 cost are being removed.
 
-median(hosp$chargeratio)
-
-# make all non-numeric columns into factors
-num.index <- c()
-for (i in 1:length(colnames(num))) {
-  num.index[i] <- which(colnames(num)[i] == colnames(hosp))
-}
-factor.index <- (1:ncol(hosp))[-num.index]
-invisible(apply(hosp[,factor.index], 2, as.factor))
 ```
 
 ```{r}
@@ -773,8 +753,6 @@ hosp <- merge(hosp, county, by="County", all=T)
 
 
 ```{r}
-# attempt to feature another var
-
 
 # graph transplant vs. charges
 ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 

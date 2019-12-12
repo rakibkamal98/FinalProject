@@ -778,7 +778,7 @@ drgs <- hosp %>%
     drg = paste(unique(DRG), collapse=";; ")
   )
 
-
+# graph transplant vs. charges
 ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 
        aes(x=DRG, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
@@ -793,9 +793,100 @@ ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6),
   xlab("DRG") +
   ylab("Charges ($)")
 
+# graph nervous system procedures vs. charges
+ggplot(filter(hosp, DRG.Code <40 & DRG.Code >= 20), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,500000)) +
+  scale_y_continuous(labels=scales::comma) +
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) +
+  ggtitle("Distribution of Charges for Nervous System Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph nervous system diagnoses vs. charges
+ggplot(filter(hosp, DRG.Code <60 & DRG.Code >= 40), 
+       aes(x=as.factor(DRG.Code), y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,200000)) +
+  scale_y_continuous(labels=scales::comma) +
+  ggtitle("Distribution of Charges for Nervous System Diagnoses") +
+  xlab("DRG") +
+  ylab("Charges ($)") +
+  labs(caption="Codes 49 and 50 correspond to infections of the nervous system (excluding viral meningitis)")
+
+# graph head/neck procedures vs charges
+ggplot(filter(hosp, DRG.Code <=93 & DRG.Code >= 89), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,200000)) +
+  scale_y_continuous(labels=scales::comma) +
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1)) +
+  scale_x_discrete(labels=c("Other facial bone", "Major facial bone",
+                            "Major larynx/trachea", "Other head/neck",
+                            "Sinus/mastoid")) +
+  ggtitle("Distribution of Charges for Head/Neck Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# graph respiratory procedures vs. charges
+ggplot(filter(hosp, DRG.Code <=130 & DRG.Code >= 120), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,400000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Major respiratory", "Other respiratory", "Respiratory diagnosis w/ ventilator 96+ hrs")) +
+  ggtitle("Distribution of Charges for Respiratory Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# create indicator var for cardiothoracic vs. vascular/circulatory procedures (purely for graphing)
+hosp_temp <- hosp %>%
+  filter(DRG.Code <= 180 & DRG.Code >= 160) %>%
+  mutate(
+    proc = case_when(
+      DRG.Code <= 167 ~ "Cardiothoracic",
+      DRG.Code > 167 ~ "Vascular/Circulatory"
+    )
+  )
+# graph cardiac procedures vs. charges
+ggplot(hosp_temp, aes(x=as.factor(DRG.Code), y=Charges, fill=proc)) +
+  geom_boxplot(outlier.shape=NA, color="grey62") +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,400000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_fill_viridis_d() +
+  ggtitle("Distribution of Charges for Cardiac Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)") +
+  theme(legend.position=c(.8,.88), 
+        legend.background=element_rect(fill="white", color="grey"),
+        legend.title="Type of Cardiac Procedure")
+
+# graph vs. charges
+ggplot(filter(hosp, DRG.Code <=130 & DRG.Code >= 120), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,400000)) +
+  scale_y_continuous(labels=scales::comma) +
+  scale_x_discrete(labels=c("Major respiratory", "Other respiratory", "Respiratory diagnosis w/ ventilator 96+ hrs")) +
+  ggtitle("Distribution of Charges for Respiratory Procedures") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+# create DRG vars
 hosp %>%
   mutate(drg.group = case_when(
-    DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant"
+    DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant",
+    DRG.Code < 40 & DRG.Code >=20 ~ "Nervous System Procedures"
+    DRG.Code == 49 | DRG.Code == 50 ~ "Nervous System Infection (excl. meningitis)",
+    DRG.Code >= 89 & DRG.Code <= 93 ~ "Head/Neck Procedures",
+    DRG.Code >= 120 & DRG.Code <= 130 ~ "Respiratory Procedures"
   ))
 
 ```

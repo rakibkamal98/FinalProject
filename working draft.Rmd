@@ -619,7 +619,76 @@ ggplot(births, aes(x=birthweight.cat, y=Charges)) +
   geom_hline(yintercept=median(births$Charges), size=1, linetype="dashed", color="navy blue")
 ```
 
+We also created a feature called charge ratio, defined as the total charges (amount billed to the consumer) divided by the costs (amount the hospital spent while taking care of you). 
+```{r}  
+# create charge ratio variable
+hosp$chargeratio <- hosp$Charges / hosp$Costs
 
+ggplot(hosp, aes(x=Charges, y=Costs)) + 
+  geom_point(alpha=.3)
+
+ggplot(hosp, aes(x=chargeratio)) +
+  geom_histogram() +
+  xlim(0, 1) # cut out outliers
+
+ggplot(hosp, aes(x=chargeratio)) +
+  geom_histogram(bins=15, fill="white", color="black") +
+  xlim(0,10) +
+  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
+  xlab("Ratio of Charges to Costs") +
+  ylab("Number of Admissions") +
+  #ggtitle("Distribution of Charge Ratio") +
+  scale_y_continuous(labels=scales::comma)
+# This distribution is obviously right-skewed, with a median of around 2. 
+# note removal of rows with 0 cost are being removed.
+
+```
+
+Investigating the weird magic slope
+```{r}
+# in search of the magic slope
+temp <- hosp %>%
+  filter(Charges < 2500000) %>%
+  filter(chargeratio < 1)
+
+ggplot(temp, aes(x=Charges, y=Costs)) +
+  geom_point(alpha=.3)
+# magic slope looks (by visual inspection) to be 2/3
+# filter between .7 and .6 chargeratio
+temptemp <- temp %>%
+  filter(chargeratio < .7 & chargeratio > .6)
+ggplot(temptemp, aes(x=Charges, y=Costs)) +
+  geom_point(alpha=.3)
+ggplot(temptemp, aes(x=chargeratio)) +
+  geom_histogram()
+
+# filter between .675 and .65 chargeratio
+temptemptemp <- temptemp %>%
+  filter(chargeratio < .675 & chargeratio > .65)
+ggplot(temptemptemp, aes(x=Charges, y=Costs)) +
+  geom_point(alpha=.3)
+ggplot(temptemptemp, aes(x=chargeratio)) +
+  geom_histogram()
+
+# filter between .6595 and .6605
+temptemptemptemp <- temptemptemp %>%
+  filter(chargeratio < .6605 & chargeratio > .6595)
+ggplot(temptemptemptemp, aes(x=Charges, y=Costs)) +
+  geom_point(alpha=.3)
+ggplot(temptemptemptemp, aes(x=chargeratio)) +
+  geom_histogram()
+table(round(temptemptemptemp$chargeratio, digits=5)) 
+# we see most observations fall right at .65994
+
+
+filtered <- filter(temptemptemptemp, round(chargeratio, digits=6)==.659944)
+table(filtered$CCS.Code) # most are code 131: respiratory failure
+table(filtered$CCS.Procedure.Code) # most are code 216: resp intub/mech ventil
+table(filtered$DRG.Code) # most are 130 or 133: resp system w/ ventilator support 96+ hours OR respiratory failure. 
+table(filtered$Surgical) # all medical severity
+table(filtered$Payment1) # almost all are Medicaid or Medicare
+table(filtered$Facility.ID)
+```
 
 
 ## Create indicator variables
@@ -650,30 +719,6 @@ hosp <- hosp %>%
 
 # Test Center
 
-```{r}  
-# create charge ratio variable
-hosp$chargeratio <- hosp$Charges / hosp$Costs
-
-ggplot(hosp, aes(x=Charges, y=Costs)) + 
-  geom_point(alpha=.3)
-
-ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram() +
-  xlim(0, 20) # cut out outliers
-
-
-ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram(bins=15, fill="white", color="black") +
-  xlim(0,10) +
-  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
-  xlab("Ratio of Charges to Costs") +
-  ylab("Number of Admissions") +
-  #ggtitle("Distribution of Charge Ratio") +
-  scale_y_continuous(labels=scales::comma)
-# This distribution is obviously right-skewed, with a median of around 2. 
-# note removal of rows with 0 cost are being removed.
-
-```
 
 ```{r}
 # feature engineering
@@ -1070,4 +1115,8 @@ hosp <- hosp %>%
     TRUE ~ "Other"
   ))
 
+myindex <- sample(1:nrow(hosp), 100000)
+mysamp <- hosp[myindex,]
+
+write.csv(mysamp, file="sample for ml.csv", row.names=F)
 ```

@@ -477,7 +477,32 @@ ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
   geom_hline(yintercept=median(hosp$Charges), color="navy blue", linetype="dashed", size=1) +
   labs(caption="Only MDC codes with noticeably different distributions from the norm are shown. \n Also, the y axis has been altered to show better resolution, and outliers have \n been removed because they are evenly spread across all categories.")
 ```
-Here, we can see that diseases of certain body systems are associated with higher or lower median charges. MDC codes 8, 17, 18, 22, and 25 (respectively: Musculoskeletal, myeloproliferative, infectious disease, burns, and multiple significant trauma) have higher median charges, as expected. MDC codes 14, 15, and 20 (respectively: pregnancy/childbirth, newborn, and alcohol/drug use) have lower median charges and lower variations. 
+Here, we can see that diseases of certain body systems are associated with higher or lower median charges. MDC codes 8, 17, 18, 22, and 25 (respectively: Musculoskeletal, myeloproliferative, infectious disease, burns, and multiple significant trauma) have higher median charges, as expected. MDC codes 14, 15, and 20 (respectively: pregnancy/childbirth, newborn, and alcohol/drug use) have lower median charges and lower variations. We wanted to see if this difference could be explained by differences in admission durations and created the following plot.
+
+```{r}
+# get median duration for each mdc.code (used for graphing)
+durs <- hosp %>%
+  group_by(MDC.Code) %>%
+  summarise(
+    dur = median(Duration, na.rm=T),
+    charge = median(Charges)
+  ) %>%
+  arrange(desc(dur))
+
+# graph mdc code vs. duration
+ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_text(data = durs, aes(x = as.factor(MDC.Code), y = dur, label = dur), 
+              size = 3.5, vjust = -.3, color=mygreen) +
+  coord_cartesian(ylim=c(0, 25)) +
+  scale_x_discrete(limits = c("8", "14", "15", "17", "18", "20", "22", "25")) +
+  xlab("MDC Code") +
+  ylab("Duration of Admission (days)") +
+  ggtitle("Comparison of the Distribution of Admission Duration between MDC Codes") +
+  geom_hline(yintercept=median(hosp$Duration), size=1, linetype="dashed", color="navy blue")
+# only choosing to output MDC codes already identified as different from the median charges (previous section)
+```
+Here, we can see that some of the MDC codes' that had noticeably different charge distributions have the same difference in their duration distributions (i.e. codes 17, 18, 22, and 25 had higher distributions of both variables, while codes 14 and 15 have lower distributions of both variables). However, we also see that codes 8 and 20 have distributions centering around the median of all records (shown as a navy blue dashed line), despite code 8 (Musculoskeletal) having a higher charge distribution and code 20 (Alcohol/Drug Use) having a lower charge distribution than normal. This shows that, although duration seems to encapsulate much of the variation in charges (and would obviously serve as a good predictor), it does not explain all of it.
 
 ```{r}
 # for pregnancies: charges vs. age groups
@@ -537,8 +562,66 @@ ggplot(hosp, aes(x=reorder(Discharge.Status, -Charges), y=Charges)) +
 Here, we see that Discharge Status does seem to have predictive value for Charges. Patients that were discharged to a longterm hospital, a nursing home, inpatient rehab, or hospice have higher median charges compared to those that were discharged to shortterm hospitals, supportive care, or self-care. This makes sense, as the former discharge locations would likely correspond to older patients or those with more serious conditions. Also, we note that "Expired" patients (those that died at the hospital) also have higher median charges.
 
 
+Next, we move onto an analysis of birthweight.
 ```{r}
+# get df of only birth records
+births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),]
+
+# graph birthweight vs. severity
+ggplot(births[!is.na(births$Severity),], aes(
+  x=Severity, y=Birthweight)
+  ) +
+  geom_boxplot() +
+  ggtitle("Distribution of Birthweight based on Severity") +
+  xlab("Severity") +
+  ylab("Birthweight (g)") +
+  scale_x_discrete(limits=c("Minor", "Moderate", "Major", "Extreme"))
+
+# graph birthweight vs. duration
+ggplot(births, aes(x=Birthweight, y=Duration)) + 
+  geom_point(alpha=.3) +
+  ggtitle("Duration of Admission as a function of Birthweight") +
+  xlab("Birthweight (g)") +
+  ylab("Duration (days)")
+
+# graph birthweight vs. charges
+ggplot(births, aes(x=Birthweight, y=Charges)) +
+  geom_point(alpha=.3) +
+  ggtitle("Charges as a function of Birthweight") +
+  xlab("Birthweight (g)") +
+  ylab("Charges ($)") +
+  ylim(0, 500000) + # to cut out outliers
+  labs(caption="The y axis has been altered to show better resolution.")
 ```
+These graphs show many expected trends shown by our correlation plot earlier. As birthweight decreases, severity increases, the duration of the hospital admission increases, and charges increase. 
+
+In terms of feature engineering, we decided to create a feature called birthweight.cat, which divided birthweights into the categories (based on medical literature) of "Normal", "Low", "Very Low", and "Extremely Low." Below, we see that a graph of charges distribution as a function of these categories shows clearer separation of charge distributions than birthweight or severity alone (the median birth charge is shown as a blue dashed line). Thus, we expect this feature to be a good predictor of charges.
+
+```{r}
+# Engineered feature to create birthweight cutoffs (birthweight.cat)
+hosp <- hosp %>%
+  mutate(birthweight.cat = case_when(
+    Birthweight < 2500 & Birthweight > 1500 ~ "Low",
+    Birthweight <= 1500 & Birthweight > 1000 ~ "Very Low",
+    Birthweight <= 1000 ~ "Extremely Low",
+    TRUE ~ "Normal"
+  ))
+# reinitialize births df
+births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),] 
+
+# graph birthweight.cat vs. charges
+ggplot(births, aes(x=birthweight.cat, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  coord_cartesian(ylim=c(0,1000000)) +
+  ggtitle("Distribution of Charges based on Birthweight Category") +
+  xlab("Birthweight Category") +
+  ylab("Charges ($)") +
+  scale_x_discrete(limits=c("Normal", "Low", "Very Low", "Extremely Low")) +
+  scale_y_continuous(labels=scales::comma) +
+  geom_hline(yintercept=median(births$Charges), size=1, linetype="dashed", color="navy blue")
+```
+
+
 
 
 ## Create indicator variables
@@ -569,67 +652,8 @@ hosp <- hosp %>%
 
 # Test Center
 
-```{r}
-# ADD IN
-
-births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),]
-
-ggplot(births[!is.na(births$Severity.Code),], aes(
-  x=as.factor(Severity.Code), y=Birthweight)
-  ) +
-  geom_boxplot(colour=mygreen)
-
-ggplot(births, aes(x=Birthweight, y=Duration)) + 
-  geom_point(alpha=.3)
-
-ggplot(births, aes(x=Birthweight, y=Charges)) +
-  geom_point(alpha=.3)
-ggplot(births, aes(x=Birthweight, y=Charges)) +
-  geom_point(alpha=.3) +
-  ylim(0, 2500000) # to cut out outliers
-
-ggplot(births, aes(x=Birthweight, y=Costs)) +
-  geom_point(alpha=.3)
-ggplot(births, aes(x=Birthweight, y=Costs)) +
-  geom_point(alpha=.3) +
-  ylim(0, 1000000) # to cut out outliers
-
-
-
-
-durs <- hosp %>%
-  group_by(MDC.Code) %>%
-  summarise(
-    dur = median(Duration, na.rm=T),
-    cost = mean(Costs),
-    charge = median(Charges)
-  ) %>%
-  arrange(desc(dur))
-
-ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
-  geom_boxplot(outlier.shape=NA) +
-  geom_text(data = durs, aes(x = as.factor(MDC.Code), y = dur, label = dur), 
-              size = 3.5, vjust = -.3, color=mygreen) +
-  coord_cartesian(ylim=c(0, 25)) +
-  scale_x_discrete(limits = c("2", "12", "13", "17", "18", "19", "22", "23", "24", "25")) +
-  xlab("MDC Code") +
-  ylab("Duration of Admission (days)") +
-  ggtitle("Comparison of the Distribution of Admission Duration between MDC Codes")
-# only choosing to output durations that seem different from the norm of 3 or so days.
-
-# 2, 12, 13 have lower durations and fewer high outliers. 17-19, and 22-25 have higher average durations. We also see this played out in their averages.
-
-# just show a couple and show the median. 
-colnames(hosp)
-
-
-  
-hosp %>%
-  group_by(MDC.Code) %>%
-  summarise(
-    k=unique(MDC)
-  )
-
+```{r}  
+# create charge ratio variable
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
 ggplot(hosp, aes(x=Charges, y=Costs)) + 
@@ -706,16 +730,6 @@ hosp <- hosp %>%
     TRUE ~ 0
   ))
 
-# Birthweight find cutoffs
-hosp <- hosp %>%
-  mutate(birthweight.cat = case_when(
-    Birthweight < 2500 & Birthweight > 1500 ~ "Low",
-    Birthweight <= 1500 & Birthweight > 1000 ~ "Very Low",
-    Birthweight <= 1000 ~ "Extremely Low",
-    TRUE ~ "Normal"
-  ))
-
-# average cost for each prodedure? https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp
 
 # overall grouping for each procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp app
 procs <- hosp %>%
@@ -747,12 +761,42 @@ hosp <- hosp %>%
   ))
 
 
+# median income for each county (used to extrapolate hospital tax funds in the area)
 # read in county data
 rakib3 <- "C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\county.csv"
 ashley3 <- "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/county.csv"
 county <- read.csv(ashley3)
 # left outer join with county data
 hosp <- merge(hosp, county, by="County", all=T)
+
+
+# attempt to feature another var
+
+drgs <- hosp %>%
+  group_by(DRG.Code) %>%
+  summarise(
+    drg = paste(unique(DRG), collapse=";; ")
+  )
+
+
+ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 
+       aes(x=DRG, y=Charges)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_hline(yintercept=median(hosp$Charges), linetype="dashed", size=1, color="navy blue") +
+  coord_cartesian(ylim=c(0,2500000)) +
+  scale_y_continuous(labels=scales::comma) +
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) +
+  scale_x_discrete(labels=c("Bone marrow", "Heart/Lung", 
+                            "Kidney", "Liver/Intestinal",
+                            "Pancreas")) +
+  ggtitle("Distribution of Charges for Types of Transplants") +
+  xlab("DRG") +
+  ylab("Charges ($)")
+
+hosp %>%
+  mutate(drg.group = case_when(
+    DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant"
+  ))
 
 ```
 

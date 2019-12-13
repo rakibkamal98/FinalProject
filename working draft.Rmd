@@ -1,7 +1,7 @@
 ---
-title: "Week12"
+title: "The Cost of Care"
 author: "Ashley Hirt, Shreya Dubey, Rakib Kamal"
-date: "11/18/2019"
+date: "12/12/2019"
 output:
   html_document: default
   pdf_document: default
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Library Packages
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(data.table)
 library(tidyverse)
 library(viridis)
@@ -31,7 +31,7 @@ mycolors <- c("Number of Admissions" = mygreen,
 ## Read in Data
 
 First, we read in our data and the columns. We will also get rid of Discharge.Year because all of the years were 2016.
-```{r read data}
+```{r read data, warning=FALSE}
 ashley <- "G:/My Drive/DATA/Final Project/hospital.csv"
 rakib <- "C:\\Users\\Rakib Kamal\\Box Sync\\Fall 2019\\DS4001\\Projects\\Final\\hospital.csv"
 
@@ -59,7 +59,7 @@ hosp <- hosp[,-which(colnames(hosp)=="Discharge.Year")]
 ```
 
 ## Introduction and Data Summary
-Our dataset contains New York hospital discharge data from 2016. The information was gathered by SPARCS, the Statewide Planning and Research Cooperative System. The data contains discharge level details on patient characteristics, diagnoses, treatments, services, and charges. Because this is a part of the New York Department of Health, we can assume that is is a credible source. In the dataset, the information provided is basic level discharge information such as diagnoses and charges. Notably, the data has been deidentified to prevent HIPPA vilations, so the exact date of discharge and other sensitive variables have been removed. Also, for cases where patients came from sparsely populated areas or had rare diseases, additional information was redacted to protect their privacy.
+Our dataset contains New York hospital discharge data from 2016. The information was gathered by SPARCS, the Statewide Planning and Research Cooperative System. The data contains discharge level details on patient characteristics, diagnoses, treatments, services, and charges. Because this is a part of the New York Department of Health, we can assume that is a credible source. In the dataset, the information provided is basic level discharge information such as diagnoses and charges. Notably, the data has been deidentified to prevent HIPPA violations, so the exact date of discharge and other sensitive variables have been removed. Also, for cases where patients came from sparsely populated areas or had rare diseases, additional information was redacted to protect their privacy.
 
 When looking at the columns of data such as patient demographics, cost, charges, and treatments, there was a striking difference between the cost of treatment for the hospital and the amount of money billed to insurance. We decided to further analyze the charges variable to see if we can predict the amount of money a hospital charges based on other factors provided by this dataset. 
 
@@ -68,6 +68,7 @@ This dataset contained about 1GB of data with over 2.5 million rows. In order to
 
 ## Examine Existing NAs
 In examining NAs, we see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. Please note that in any cases where we think there could be systematic missingness in categorical variables, we are keeping the variables as "unknown" or "not applicable" rather than recoding them as NAs. This is because randomForest removes any rows with NAs or forces you to impute them; instead, we'd like to keep them as a separate grouping. For continuous variables, we are recoding them as NAs to avoid introducing strings into a numeric variable; these will be removed in later model building.
+
 ```{r examine existing NAs}
 sum(complete.cases(hosp) == F) # 1725198 incomplete cases
 
@@ -95,7 +96,7 @@ Zipcode has 36215 NAs. The data dictionary states that the patient zip code will
 
 
 Severity AND Mortality.Risk each have 67 NAs, which also co-occur. Most of these records have no diganosis under the DRG column and they have a DRG.Code greater than 952. This doesn't make sense, since the maximum DRG.Code used in New York State is 952. Thus, we assume these records had missing or invalid DRG Codes. Since Severity and mortality.risk are derived from the DRG coding system as well, it makes sense that they would also be NAs. Also, (inexplicably), for all of these records, the CCS.Diagnosis corresponds to some type of birth that was not an abortion.
-```{r}
+```{r warning=FALSE}
 # examine incomplete severity rows
 severity.incomplete <- incomplete[is.na(incomplete$Severity),]
 unique(severity.incomplete$DRG.Code)
@@ -111,7 +112,7 @@ Payment2 has 834420 NAs. Payment3 has 1691076 NAs. These correspond to people th
 
 ## Change Invalid Values to NAs
 To identify invalid values in each of our variables, we look at their distributions (either a histogram for quantitative variables or bar plots for categorical variables). 
-```{r}
+```{r warning=FALSE}
 # examine birthweight plot for strange values
 ggplot(hosp, aes(x=Birthweight)) +
   geom_histogram() + 
@@ -122,7 +123,7 @@ ggplot(hosp, aes(x=Birthweight)) +
 
 We see that there are a large number of 0s for birthweight, which indicates that the record does not correspond to a pregnancy/birth. We replace all 0s with "Not a birth", reexamine the birthweight plot, and see that it appears normal (as expected)
 
-```{r}
+```{r warning=FALSE}
 hosp$Birthweight <- ifelse(hosp$Birthweight==0, NA, hosp$Birthweight)
 
 # reexamine birthweight plot
@@ -135,7 +136,7 @@ ggplot(hosp, aes(x=Birthweight)) +
 ```
 
 Next, we look at the distribution of CCS Procedure Code. The highest CCS Procedure Code used is 231, but the highest code in our dataset is 999, which corresponds to "Ungroupable" procedures. We will make those procedures NAs. Also, a procedure code of 0 corresponds to "No procedure", which we will later make an indicator variable for.
-```{r}
+```{r warning=FALSE}
 # examine distribution of CCS procedure code
 ggplot(hosp, aes(x=CCS.Procedure.Code)) + 
   geom_histogram() +
@@ -151,14 +152,14 @@ hosp[hosp$CCS.Procedure.Code==0, c("CCS.Procedure.Code", "CCS.Procedure")][1,]
 ```
 
 We also see that there are 14 rows with an MDC code of 0, corresponding to the category "Pre-MDC or Ungroupable." We replace these values with NAs. 
-```{r}
+```{r warning=FALSE}
 nrow(hosp[hosp$MDC.Code==0,]) # 14 rows have MDC.code=0
 # replace with NAs
 hosp$MDC.Code <- ifelse(hosp$MDC.Code==0, NA, hosp$MDC.Code)
 ```
 
 Also, we change the one invalid numeric value in Duration to a numeric value (120+ to 120). 
-```{r}
+```{r warning=FALSE}
 hosp$Duration <- ifelse(hosp$Duration == "120 +", 120, hosp$Duration)
 hosp$Duration <- as.numeric(hosp$Duration)
 ```
@@ -302,7 +303,7 @@ This could indicate disproportionate usage of the healthcare system by some coun
 
 
 Next, we examine how cerficate compares to facility.name and facility.ID (are they redundant?).
-```{r}
+```{r warning=FALSE}
 name <- list()
 id <- list()
 
@@ -319,7 +320,7 @@ x$name[c(1:10)]
 From this, we see that there are multiple hospital names for the same certificate number, but they are typically different campuses of the same main hospital (e.g. "Albany Medical Center Hospital" and "Albany Medical Center - South Clinical Campus"). The facility ID corresponds to these campus differences. So we assume that in our classification tasks, we will not use certificate or facility.name, we'll just use facility.ID because it encapsulates the former two variables.
 
 
-```{r}
+```{r warning=FALSE}
 # examine distribution of facility ID
 ggplot(hosp, aes(x=Facility.ID)) + 
   geom_histogram() +
@@ -330,7 +331,7 @@ ggplot(hosp, aes(x=Facility.ID)) +
 
 It appears unusual that some facility IDs are in the 9000s, but this is not mentioned in our data dictionary, so there is no way to know if they are valid or not.
 
-```{r}
+```{r warning=FALSE}
 high.id <- filter(hosp, Facility.ID>9000)
 unique(high.id$Area)
 unique(high.id$Facility.Name)
@@ -338,13 +339,13 @@ unique(high.id$Facility.Name)
 Examination of these rows indicates there are 3,151 rows with facility.ID>9000. They all come from one of 3 hospitals: St Peter's Addiction Recovery Center, The Burdett Care Center, and Crouse Hospital - Commonwealth Division. Although their facility.ID values seem unusual, these records do appear valid, so we keep them in the dataset unchanged.
 
 After performing this analysis, we drop the facility.name and certificate rows, but keep the Facility.ID variable.
-```{r}
+```{r warning=FALSE}
 # drop columns Facility.Name and certificate
 hosp <- hosp[,-which(colnames(hosp) %in% c("Certificate", "Facility.Name"))]
 ```
 
 Next, we examine a distribution of age groups.
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Age, y=..prop.., group=1)) + 
   geom_bar() +
   ggtitle("Distribution of Age Group") +
@@ -355,7 +356,7 @@ ggplot(hosp, aes(x=Age, y=..prop.., group=1)) +
 
 This appears normal, no NAs. Age groups 50-69, and 70+ have the highest amount of hospital discharge records, which is consistent with what is expected.
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Race)) + 
   geom_bar(stat="count") +
   ggtitle("Distribution of Race") +
@@ -365,7 +366,7 @@ ggplot(hosp, aes(x=Race)) +
 
 The distribution of race also appears normal, no NAs. Note that "other race" is explained in the data dictionary as coding for Asians, Pacific Islanders, and Native Americans.
 
-```{r}
+```{r warning=FALSE}
 y <- hosp %>% group_by(Duration) %>% summarize(count = n())
 ggplot(y, aes(x=as.numeric(Duration), y=count)) + 
   geom_point() +
@@ -378,7 +379,7 @@ Here we see that the vast majority of Hospital durations are less than 10 days. 
 
 
 Finally, we look at the correlations of our numeric variables with eachother.
-```{r}
+```{r warning=FALSE}
 library(corrplot)
 hosp$Duration <- as.numeric(hosp$Duration)
 # get numeric columns
@@ -390,14 +391,14 @@ x <- cor(num[complete.cases(num)==T,]); corrplot(x)
 
 From the corrplot, we see that DRG Code and MDC Code are highly correlated. This is surprising, considering that there are only 26 MDC codes which correspond to organ systems, while there are 300+ DRG Codes that represent specific diseases. We also see that there is a moderate positive correlation between severity code and duration, which makes sense since severity code is on a 1-4 scale with 4 being extremely severe. Also, there is a moderate negative correalation between birthweight and duration (again as expected, these likely represent premature babies that required more care). There is a strong positive correlation between charges and duration, as well as costs with duration and costs with charges. Finally, there is a weak negative correlation between birthweight and severity code (smaller babies have higher severity codes), a weak positive correlation of severity code with costs and severity code with charges (more severe cases cost the hospital more to treat, which is passed on to the patient), and a weak negative association between birthweight and charges/costs.
 
- I am surprised to see the significance that birthweight has as a predictor for our other variables. Specifically, we can draw some preliminary conclusions: the lower the birthweight, the higher the duration, the higher the severity code, and the higher the charges/costs.
+ We were surprised to see the significance that birthweight has as a predictor for our other variables. Specifically, we can draw some preliminary conclusions: the lower the birthweight, the higher the duration, the higher the severity code, and the higher the charges/costs.
 
 
 
 ## Examine Potential Predictors of Charges
 We have chosen to predict charges (cost charged to the patient) using the demographic and medical information in our dataset. To see how our predictors are correlated with this response variable (if at all), we examine graphs of boxplots for each predictor.
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Age, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 150000)) +
@@ -409,7 +410,7 @@ ggplot(hosp, aes(x=Age, y=Charges)) +
 
 The above graph shows what one would generally expect: the older the patient, the higher the charges (end-of-life care is expensive and prolonged).
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Age, y=Charges, fill=factor(Gender, levels=c("M", "F", "Unknown")))) +
   geom_boxplot(outlier.shape=NA, color="grey62") +
   coord_cartesian(ylim=c(0, 150000)) +
@@ -424,7 +425,7 @@ ggplot(hosp, aes(x=Age, y=Charges, fill=factor(Gender, levels=c("M", "F", "Unkno
 
 Here, we see that charges don't tend to change that much between males and females. The distribution is more spread for males (a higher upper whisker can be seen in all age groups), indicating more variability; however, the medians are not different from those of females. We do see that the "Unknown" gender distribution is different from that of males and females, with either markedly increased or decreased variability (as measured by the IQR). This is likely because there were only 57 Unknown gender records. Thus, we expect Gender (especially its Unknown level) to be somewhat predictive of Charges.
 
-```{r}
+```{r warning=FALSE}
 # charges vs. race
 ggplot(hosp, aes(x=Race, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
@@ -447,7 +448,7 @@ ggplot(hosp, aes(x=Ethnicity, y=Charges)) +
 Here, we see that the distribution of charges does not change much across different races or across different Ethnicities, so we would not expect Race or Ethnicity to be a good predictor of Charges.
 
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Area, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 150000)) +
@@ -461,7 +462,7 @@ ggplot(hosp, aes(x=Area, y=Charges)) +
 
 From this graph, we see that certain areas (Hudson Valley, Long Island, and NYC) have higher median charges (and overall distributions) than other areas. Thus, we would expect Area to be a good predictor of Charges.
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=reorder(County, -Charges), y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 150000)) +
@@ -473,9 +474,10 @@ ggplot(hosp, aes(x=reorder(County, -Charges), y=Charges)) +
   geom_hline(yintercept=median(hosp$Charges), size=1, color="blue", linetype="longdash")
 ```
 
-Here, we see that Manhattan, Nassau, Westchester, Suffolk, and Rockland counties have the highest median charges. The first two of these counties also represent counties that were disproportionately represented in our dataset compared to their percent of the NY state population (see bar graph earlier in the report). I would hypothesize that hospitals in these counties are teaching hospitals or "the best"/highest funded in the state, which would both attract patients from other counties and attract rare/difficult cases that cost more to treat. Another explanation is that these counties treat older patients, which typically cost more to treat. We examine this explanation below for Manhattan County.
 
-```{r}
+Here, we see that Manhattan, Nassau, Westchester, Suffolk, and Rockland counties have the highest median charges. The first two of these counties also represent counties that were disproportionately represented in our dataset compared to their percent of the NY state population (see bar graph earlier in the report). We can would hypothesize that hospitals in these counties are teaching hospitals or "the best"/highest funded in the state, which would both attract patients from other counties and attract rare/difficult cases that cost more to treat. Another explanation is that these counties treat older patients, which typically cost more to treat. We examine this explanation below for Manhattan County.
+
+```{r warning=FALSE}
 mycolors2 <- c("Manhattan" = mygreen,
                "Dataset" = mypurple)
 ggplot(filter(hosp, County=="Manhattan"), aes(x=Age, y=..prop.., group=1)) +
@@ -492,7 +494,7 @@ ggplot(filter(hosp, County=="Manhattan"), aes(x=Age, y=..prop.., group=1)) +
 
 Here, we see that Manhattan County's age distribution (shown in green) is actually shifted left compared to the age distribution of NY state (the whole dataset, shown in light purple). This means that Manhattan actually sees less patients that are on average younger than most other hospitals in the state. Thus, the hypothesis that Manhattan has higher median charges because it treats older patients seems untrue.
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0,250000)) +
@@ -506,7 +508,7 @@ ggplot(hosp, aes(x=as.factor(MDC.Code), y=Charges)) +
 
 Here, we can see that diseases of certain body systems are associated with higher or lower median charges. MDC codes 8, 17, 18, 22, and 25 (respectively: Musculoskeletal, myeloproliferative, infectious disease, burns, and multiple significant trauma) have higher median charges, as expected. MDC codes 14, 15, and 20 (respectively: pregnancy/childbirth, newborn, and alcohol/drug use) have lower median charges and lower variations. We wanted to see if this difference could be explained by differences in admission durations and created the following plot.
 
-```{r}
+```{r warning=FALSE}
 # get median duration for each mdc.code (used for graphing)
 durs <- hosp %>%
   group_by(MDC.Code) %>%
@@ -532,7 +534,7 @@ ggplot(hosp, aes(x=as.factor(MDC.Code), y=Duration)) +
 
 Here, we can see that some of the MDC codes' that had noticeably different charge distributions have the same difference in their duration distributions (i.e. codes 17, 18, 22, and 25 had higher distributions of both variables, while codes 14 and 15 have lower distributions of both variables). However, we also see that codes 8 and 20 have distributions centering around the median of all records (shown as a navy blue dashed line), despite code 8 (Musculoskeletal) having a higher charge distribution and code 20 (Alcohol/Drug Use) having a lower charge distribution than normal. This shows that, although duration seems to encapsulate much of the variation in charges (and would obviously serve as a good predictor), it does not explain all of it.
 
-```{r}
+```{r warning=FALSE}
 # for pregnancies: charges vs. age groups
 ggplot(filter(hosp, MDC.Code==14), aes(x=Age, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
@@ -556,7 +558,7 @@ ggplot(filter(hosp, MDC.Code==14), aes(x=Age, y=as.numeric(Duration))) +
 
 In the first graph, we see that older patients tend to have more expensive pregnancies/childbirths (as expected). The dark blue line represents the median charge of all pregnancies (MDC code=14). In the second graph, we see a possible explanation for this trend: older patients have longer admission durations, which is correlated with increased charges. The dark blue line represents the median duration of all pregnancies.
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=Type, y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 150000)) +
@@ -569,7 +571,7 @@ ggplot(hosp, aes(x=Type, y=Charges)) +
 
 This graph shows that Trauma admissions have higher charges, while Newborn admissions have lower charges (both as expected).
 
-```{r}
+```{r warning=FALSE}
 ggplot(hosp, aes(x=reorder(Discharge.Status, -Charges), y=Charges)) +
   geom_boxplot(outlier.shape=NA) +
   coord_cartesian(ylim=c(0, 200000)) +
@@ -594,7 +596,7 @@ Here, we see that Discharge Status does seem to have predictive value for Charge
 
 
 Next, we move onto an analysis of birthweight.
-```{r}
+```{r warning=FALSE}
 # get df of only birth records
 births <- hosp[hosp$Birthweight>0 & !is.na(hosp$Birthweight),]
 
@@ -614,7 +616,7 @@ ggplot(births, aes(x=Birthweight, y=Duration)) +
   ggtitle("Duration of Admission as a function of Birthweight") +
   xlab("Birthweight (g)") +
   ylab("Duration (days)") +
-  geom_smooth(se=F)
+  geom_smooth(se=F, color="red")
 
 # graph birthweight vs. charges
 ggplot(births, aes(x=Birthweight, y=Charges)) +
@@ -624,14 +626,14 @@ ggplot(births, aes(x=Birthweight, y=Charges)) +
   ylab("Charges ($)") +
   ylim(0, 500000) + # to cut out outliers
   labs(caption="The y axis has been altered to show better resolution.") +
-  geom_smooth(se=F)
+  geom_smooth(se=F, color="red")
 ```
 
 These graphs show many expected trends shown by our correlation plot earlier. As birthweight decreases, severity increases, the duration of the hospital admission increases, and charges increase. 
 
 In terms of feature engineering, we decided to create a feature called birthweight.cat, which divided birthweights into the categories (based on medical literature) of "Normal", "Low", "Very Low", and "Extremely Low." Below, we see that a graph of charges distribution as a function of these categories shows clearer separation of charge distributions than birthweight or severity alone (the median birth charge is shown as a blue dashed line). Thus, we expect this feature to be a good predictor of charges.
 
-```{r}
+```{r warning=FALSE}
 # Engineered feature to create birthweight cutoffs (birthweight.cat) (see reference 2)
 hosp <- hosp %>%
   mutate(birthweight.cat = case_when(
@@ -656,7 +658,7 @@ ggplot(births, aes(x=birthweight.cat, y=Charges)) +
 ```
 
 We also created a feature called charge ratio, defined as the total charges (amount billed to the consumer) divided by the costs (amount the hospital spent while taking care of you). 
-```{r}  
+```{r warning=FALSE}
 # create charge ratio variable
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
@@ -674,8 +676,8 @@ ggplot(hosp, aes(x=chargeratio)) +
 
 Above, we see that the distribution of charge ratio is obviously right-skewed, with a median of around 2.9 (indicated by the dark blue dashed line). 
 
-However, in investigating charge distribution with the below plot, we noticed a strange, straight line with a higher slope than the rest of the data. To see if this indicating an abnormality in the data, we attempted to isolate the datapoints causing that trend by performing sequential filtering of the dataset.
-```{r}
+However, in investigating charge distribution with the below plot, we noticed a strange, straight line with a higher slope than the rest of the data. To see if this indicating an abnormality in the data, we attempted to isolate the datapoints causing that trend by performing sequential filtering of the dataset. Below represents 4 sequential steps involved in filtering out the observations corresponding to this strange line.
+```{r warning=FALSE}
 # plot charges vs. costs
 ggplot(hosp, aes(x=Charges, y=Costs)) + 
   geom_point(alpha=.3) +
@@ -722,7 +724,7 @@ table(round(temptemptemptemp$chargeratio, digits=5))
 ```
 
 Now that the data have been mostly isolated to 269 observations, we perform an analysis of the variable distributions to see if anything seems abnormal. Here, we see that most CCS Codes are 131, for respiratory failure, with a corresponding DRG Code of 133 or 130, which also corresponds to respiratory failure OR respiratory system diagnosis with 96+ hours of ventilator support. Most of the payment types for these patients were Medicaid or Medicare, but they do not have homogeneous gender, race, ethnicity, or ages. Finally, all patients were treated at a hospital with facility ID of 1486, corresponding to the Henry J. Carter Specialty Hospital. Beyond this, we are unable to draw any more conclusions from the data.
-```{r}
+```{r warning=FALSE}
 filtered <- filter(temptemptemptemp, round(chargeratio, digits=6)==.659944)
 table(filtered$CCS.Code) # most are code 131: respiratory failure
 table(filtered$CCS.Procedure.Code) # most are code 216: resp intub/mech ventil
@@ -735,7 +737,7 @@ hosp_og[hosp_og$Facility.Id == 1486 & !is.na(hosp_og$Facility.Id),c("Facility.Id
 
 ## Create indicator variables
 For all values replaced with NAs or other abnormalities noted above, we will create indicator variables in case there is systematic missingness.
-```{r}
+```{r warning=FALSE}
 hosp <- hosp %>%
   mutate(redacted = ifelse(is.na(hosp$Area), 1, 0),
          na.zip = ifelse(is.na(Zip), 1, 0),
@@ -762,7 +764,7 @@ hosp <- hosp %>%
 ## Feature Engineering
 
 Besides the feature already made (chargeratio), we added the following features. First, the median family income of the first 3 digits of the various patient zip codes, which we thought would serve as a marker of patient wealth (and thus health). Second, the number of payment types, which we also thought could indicate patient age or financial standing. Third, we grouped the CCS procedures by area of the body to decrease its number of levels, so it could be used as a categorical variable. Fourth, we found the median income for the county that each hospital was located in, which we thought would indicate hospital funding/quality.  
-```{r}
+```{r warning=FALSE}
 # median income for the diff zipcodes
 # read in income file
 rakib2 <- "C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\zipcodes - Sheet1.csv"
@@ -826,7 +828,7 @@ hosp <- merge(hosp, county, by="County", all=T)
 
 
 Finally, we created a grouping for DRG, which originally had over 300 levels. This grouping was made by manually examining boxplots of each DRG code and grouping codes according to their medical similarity and the similarity of their charge distributions. This would (hopefully) assist in model building later. The boxplots showing charge distributions for DRG codes that were grouped are shown in the appendix; only the feature engineering code is shown here.
-```{r}
+```{r warning=FALSE}
 # create DRG vars based off boxplots shown in appendix graphs
 hosp <- hosp %>%
   mutate(drg.group = case_when(
@@ -858,9 +860,9 @@ hosp <- hosp %>%
 
 ## Appendix
 
-Below is the code and graphs used to create the DRG groupings discussed earlier. The median charge is indicated as a dark blue dashed line. Outliers were removed and the y axis was scaled to provide appropriate resolution of the boxplots.
+Below is the code and graphs used to create the DRG groupings discussed earlier. The median charge is indicated as a dark blue dashed line. Outliers were removed and the y axis was scaled to provide appropriate resolution of the boxplots. Please note that these graphs were only used to create the feature and are not used within our narrative.
 
-```{r}
+```{r warning=FALSE}
 # graph transplant vs. charges
 ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 
        aes(x=DRG, y=Charges)) +

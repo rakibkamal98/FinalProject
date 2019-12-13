@@ -58,12 +58,16 @@ unique(hosp$Discharge.Year)
 hosp <- hosp[,-which(colnames(hosp)=="Discharge.Year")]
 ```
 
-## Introduction
+## Introduction and Data Summary
+Our dataset contains New York hospital discharge data from 2016. The information was gathered by SPARCS, the Statewide Planning and Research Cooperative System. The data contains discharge level details on patient characteristics, diagnoses, treatments, services, and charges. Because this is a part of the New York Department of Health, we can assume that is is a credible source. In the dataset, the information provided is basic level discharge information such as diagnoses and charges. Notably, the data has been deidentified to prevent HIPPA vilations, so the exact date of discharge and other sensitive variables have been removed. Also, for cases where patients came from sparsely populated areas or had rare diseases, additional information was redacted to protect their privacy.
 
-## Data Summary
+When looking at the columns of data such as patient demographics, cost, charges, and treatments, there was a striking difference between the cost of treatment for the hospital and the amount of money billed to insurance. We decided to further analyze the charges variable to see if we can predict the amount of money a hospital charges based on other factors provided by this dataset. 
+
+This dataset contained about 1GB of data with over 2.5 million rows. In order to clean the data, we removed any of the redacted rows as they would not be able to be used in our model. We removed the year column as all of the data was from 2016. Some zip codes were left blank for confidentiality reasons. For these cases, we removed the zip code values. We also removed any invalid DRG, MDC, CCS, or CCS Procedure codes from analysis. Below is a summary of the variables provided in the dataset, as well as any cleaning we did. The next section more thoroughly explains how the dataset was cleaned.
+
 
 ## Examine Existing NAs
-Then, we examine existing NAs. We see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. Please note that in any cases where we think there could be systematic missingness in categorical variables, we are keeping the variables as "unknown" or "not applicable" rather than recoding them as NAs. This is because randomForest removes any rows with NAs or forces you to impute them; instead, we'd like to keep them as a separate grouping. For continuous variables, we are recoding them as NAs to avoid introducing strings into a numeric variable.
+In examining NAs, we see that, of our 2,343,429 rows, there are 1,725,198 incomplete cases. Please note that in any cases where we think there could be systematic missingness in categorical variables, we are keeping the variables as "unknown" or "not applicable" rather than recoding them as NAs. This is because randomForest removes any rows with NAs or forces you to impute them; instead, we'd like to keep them as a separate grouping. For continuous variables, we are recoding them as NAs to avoid introducing strings into a numeric variable; these will be removed in later model building.
 ```{r examine existing NAs}
 sum(complete.cases(hosp) == F) # 1725198 incomplete cases
 
@@ -625,45 +629,48 @@ We also created a feature called charge ratio, defined as the total charges (amo
 # create charge ratio variable
 hosp$chargeratio <- hosp$Charges / hosp$Costs
 
+# graph distribution of chargeratio
+ggplot(hosp, aes(x=chargeratio)) +
+  geom_histogram(bins=15, fill="white", color="black") +
+  xlim(0,10) +
+  geom_vline(xintercept=median(hosp$chargeratio), 
+             linetype="dashed", color="navy blue", size=1) +
+  xlab("Ratio of Charges to Costs") +
+  ylab("Number of Admissions") +
+  ggtitle("Distribution of Charge Ratio") +
+  scale_y_continuous(labels=scales::comma) # note removal of rows due to 0 cost or 0 charge
+```
+Above, we see that the distribution of charge ratio is obviously right-skewed, with a median of around 2.9 (indicated by the dark blue dashed line). 
+
+However, in investigating charge distribution with the below plot, we noticed a strange, straight line with a higher slope than the rest of the data. To see if this indicating an abnormality in the data, we attempted to isolate the datapoints causing that trend by performing sequential filtering of the dataset.
+```{r}
+# plot charges vs. costs
 ggplot(hosp, aes(x=Charges, y=Costs)) + 
   geom_point(alpha=.3) +
   ggtitle("Charges as a function of Costs") +
   xlab("Charges ($)") +
-  ylab("Costs ($)")
+  ylab("Costs ($)") +
+  labs(caption="Note the line in the left corner that has a higher slope than the rest of the data.")
 
-
-ggplot(hosp, aes(x=chargeratio)) +
-  geom_histogram(bins=15, fill="white", color="black") +
-  xlim(0,10) +
-  geom_vline(xintercept=median(hosp$chargeratio), linetype="dashed", color="navy blue", size=1) +
-  xlab("Ratio of Charges to Costs") +
-  ylab("Number of Admissions") +
-  #ggtitle("Distribution of Charge Ratio") +
-  scale_y_continuous(labels=scales::comma)
-# This distribution is obviously right-skewed, with a median of around 2. 
-# note removal of rows with 0 cost are being removed.
-
-```
-
-Investigating the weird magic slope
-```{r}
-# in search of the magic slope
+# sequential filtering of the dataset
+# 1. filter by charges < 2,500,000 and chargeratio < 1
 temp <- hosp %>%
   filter(Charges < 2500000) %>%
   filter(chargeratio < 1)
-
+# examine new plot
 ggplot(temp, aes(x=Charges, y=Costs)) +
   geom_point(alpha=.3)
-# magic slope looks (by visual inspection) to be 2/3
-# filter between .7 and .6 chargeratio
+
+# 2. From inspection, the slope of the line appears to be 3/2 cost/charge, or 2/3 charge/cost. Thus, we filter by chargeratio between .7 and .6.
 temptemp <- temp %>%
   filter(chargeratio < .7 & chargeratio > .6)
+# examine new plots
 ggplot(temptemp, aes(x=Charges, y=Costs)) +
   geom_point(alpha=.3)
 ggplot(temptemp, aes(x=chargeratio)) +
-  geom_histogram()
+  geom_histogram() # the sharp spike in the histogram represents the data we want to isolate
 
-# filter between .675 and .65 chargeratio
+# 3. Based on the spike, filter between .675 and .65 chargeratio
 temptemptemp <- temptemp %>%
   filter(chargeratio < .675 & chargeratio > .65)
 ggplot(temptemptemp, aes(x=Charges, y=Costs)) +
@@ -671,7 +678,7 @@ ggplot(temptemptemp, aes(x=Charges, y=Costs)) +
 ggplot(temptemptemp, aes(x=chargeratio)) +
   geom_histogram()
 
-# filter between .6595 and .6605
+# 4. Filter between .6595 and .6605
 temptemptemptemp <- temptemptemp %>%
   filter(chargeratio < .6605 & chargeratio > .6595)
 ggplot(temptemptemptemp, aes(x=Charges, y=Costs)) +
@@ -680,8 +687,10 @@ ggplot(temptemptemptemp, aes(x=chargeratio)) +
   geom_histogram()
 table(round(temptemptemptemp$chargeratio, digits=5)) 
 # we see most observations fall right at .65994
+```
 
-
+Now that the data have been mostly isolated to 269 observations, we perform an analysis of the variable distributions to see if anything seems abnormal. Here, we see that most CCS Codes are 131, for respiratory failure, with a corresponding DRG Code of 133 or 130, which also corresponds to respiratory failure OR respiratory system diagnosis with 96+ hours of ventilator support. Most of the payment types for these patients were Medicaid or Medicare, but they do not have homogeneous gender, race, ethnicity, or ages. Finally, all patients were treated at a hospital with facility ID of 1486, corresponding to the Henry J. Carter Specialty Hospital. Beyond this, we are unable to draw any more conclusions from the data.
+```{r}
 filtered <- filter(temptemptemptemp, round(chargeratio, digits=6)==.659944)
 table(filtered$CCS.Code) # most are code 131: respiratory failure
 table(filtered$CCS.Procedure.Code) # most are code 216: resp intub/mech ventil
@@ -691,7 +700,6 @@ table(filtered$Payment1) # almost all are Medicaid or Medicare
 table(filtered$Facility.ID) # all Facility.ID=1486
 hosp_og[hosp_og$Facility.Id == 1486 & !is.na(hosp_og$Facility.Id),c("Facility.Id", "Facility.Name")][1,] # this facility ID corresponds to the Henry J. Carter Specialty Hospital
 ```
-
 
 ## Create indicator variables
 For all values replaced with NAs or other abnormalities noted above, we will create indicator variables in case there is systematic missingness.
@@ -719,13 +727,10 @@ hosp <- hosp %>%
 ```
 
 
-# Test Center
+## Feature Engineering
 
-
+Besides the feature already made (chargeratio), we added the following features. First, the median family income of the first 3 digits of the various patient zip codes, which we thought would serve as a marker of patient wealth (and thus health). Second, the number of payment types, which we also thought could indicate patient age or financial standing. Third, we grouped the CCS procedures by area of the body to decrease its number of levels, so it could be used as a categorical variable. Fourth, we found the median income for the county that each hospital was located in, which we thought would indicate hospital funding/quality.  
 ```{r}
-# feature engineering
-
-
 # median income for the diff zipcodes
 # read in income file
 rakib2 <- "C:\\Users\\Rakib Kamal\\Documents\\GitHub\\FinalProject\\zipcodes - Sheet1.csv"
@@ -755,14 +760,7 @@ hosp <- hosp %>%
     TRUE ~ 0
   ))
 
-# overall grouping for each procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp app
-procs <- hosp %>%
-  group_by(CCS.Procedure.Code) %>%
-  summarise(
-    proc = unique(CCS.Procedure)
-  ) %>%
-  select(CCS.Procedure.Code, proc)
-
+# overall grouping for each CCS procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp)
 hosp <- hosp %>%
   mutate(CCS.Procedure.Group = case_when(
     CCS.Procedure.Code %in% c(1:9, 199, 188) ~ "Nervous System",
@@ -792,14 +790,43 @@ ashley3 <- "C:/Users/Ashley Hirt/Documents/GitHub/FinalProject/county.csv"
 county <- read.csv(ashley3)
 # left outer join with county data
 hosp <- merge(hosp, county, by="County", all=T)
+```
+
+
+
+Finally, we created a grouping for DRG, which originally had over 300 levels. This grouping was made by manually examining boxplots of each DRG code and grouping codes according to their medical similarity and the similarity of their charge distributions. This would (hopefully) assist in model building later. The boxplots showing charge distributions for DRG codes that were grouped are shown in the appendix; only the feature engineering code is shown here.
+```{r}
+# create DRG vars based off boxplots shown in appendix graphs
+hosp <- hosp %>%
+  mutate(drg.group = case_when(
+    DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant",
+    DRG.Code < 40 & DRG.Code >=20 ~ "Nervous System Procedures",
+    DRG.Code == 49 | DRG.Code == 50 ~ "Nervous System Infection (excl. meningitis)",
+    DRG.Code >= 89 & DRG.Code <= 93 ~ "Head/Neck Procedures",
+    DRG.Code >= 120 & DRG.Code <= 130 ~ "Respiratory Procedures",
+    DRG.Code <= 223 & DRG.Code >= 220 ~ "Stomach/Bowel Procedures (excl. hernia)",
+    DRG.Code == 229 ~ "Stomach/Bowel Procedures (excl. hernia)",
+    DRG.Code <= 264 & DRG.Code >= 260 ~ "Liver/Abdominal Procedures",
+    DRG.Code %in% c(301, 302, 308, 309) ~ "Hip/Knee/Femur Surgery",
+    DRG.Code %in% c(303, 304, 321) ~ "Spinal Fusion",
+    DRG.Code %in% c(362, 363) ~ "Breast Procedures",
+    DRG.Code <= 447 & DRG.Code >= 441 ~ "Kidney/Urinary Procedures",
+    DRG.Code <=566 & DRG.Code >= 540 ~ "Obstetric Procedures/Diagnoses",
+    DRG.Code %in% c(650, 651) ~ "Spleen/Blood Procedures",
+    DRG.Code <=692 & DRG.Code >= 690 ~ "Leukemia/Radiotherapy",
+    DRG.Code <=711 & DRG.Code >= 710 ~ "Infection w/ OR Procedure",
+    (DRG.Code <=776 & DRG.Code >= 773) | DRG.Code == 770 ~ "Alcohol/Drug Abuse w/o Rehab",
+    DRG.Code <=842 & DRG.Code >= 841 ~ "Burns with Skin Graft",
+    DRG.Code %in% c(850, 860, 862, 863) ~ "Rehab/Aftercare",
+    DRG.Code <=912 & DRG.Code >= 910 ~ "Multiple Significant Trauma with Procedure",
+    TRUE ~ "Other"
+  ))
 
 ```
 
 
 
-
 ```{r}
-
 # graph transplant vs. charges
 ggplot(filter(hosp, DRG.Code < 4 | DRG.Code==440 | DRG.Code==6), 
        aes(x=DRG, y=Charges)) +
@@ -1089,41 +1116,4 @@ ggplot(filter(hosp, (DRG.Code <=912 & DRG.Code >= 910)),
                             "Musculoskeletal procedure")) +
   xlab("DRG") +
   ylab("Charges ($)")
-
-# create DRG vars based off preceding graphs
-hosp <- hosp %>%
-  mutate(drg.group = case_when(
-    DRG.Code<4 | DRG.Code==6 | DRG.Code==440 ~ "Transplant",
-    DRG.Code < 40 & DRG.Code >=20 ~ "Nervous System Procedures",
-    DRG.Code == 49 | DRG.Code == 50 ~ "Nervous System Infection (excl. meningitis)",
-    DRG.Code >= 89 & DRG.Code <= 93 ~ "Head/Neck Procedures",
-    DRG.Code >= 120 & DRG.Code <= 130 ~ "Respiratory Procedures",
-    DRG.Code <= 223 & DRG.Code >= 220 ~ "Stomach/Bowel Procedures (excl. hernia)",
-    DRG.Code == 229 ~ "Stomach/Bowel Procedures (excl. hernia)",
-    DRG.Code <= 264 & DRG.Code >= 260 ~ "Liver/Abdominal Procedures",
-    DRG.Code %in% c(301, 302, 308, 309) ~ "Hip/Knee/Femur Surgery",
-    DRG.Code %in% c(303, 304, 321) ~ "Spinal Fusion",
-    DRG.Code %in% c(362, 363) ~ "Breast Procedures",
-    DRG.Code <= 447 & DRG.Code >= 441 ~ "Kidney/Urinary Procedures",
-    DRG.Code <=566 & DRG.Code >= 540 ~ "Obstetric Procedures/Diagnoses",
-    DRG.Code %in% c(650, 651) ~ "Spleen/Blood Procedures",
-    DRG.Code <=692 & DRG.Code >= 690 ~ "Leukemia/Radiotherapy",
-    DRG.Code <=711 & DRG.Code >= 710 ~ "Infection w/ OR Procedure",
-    (DRG.Code <=776 & DRG.Code >= 773) | DRG.Code == 770 ~ "Alcohol/Drug Abuse w/o Rehab",
-    DRG.Code <=842 & DRG.Code >= 841 ~ "Burns with Skin Graft",
-    DRG.Code %in% c(850, 860, 862, 863) ~ "Rehab/Aftercare",
-    DRG.Code <=912 & DRG.Code >= 910 ~ "Multiple Significant Trauma with Procedure",
-    TRUE ~ "Other"
-  ))
-
-```
-
-```{r}
-f <- hosp %>%
-  filter(complete.cases(.))
-myindex <- sample(1:nrow(f), 10000)
-ff <- f[myindex,]
-write.csv(f, file="sample for ml.csv", row.names=F)
-
-
 ```

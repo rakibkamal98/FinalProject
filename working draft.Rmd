@@ -394,7 +394,8 @@ ggplot(hosp, aes(x=Age, y=Charges, fill=factor(Gender, levels=c("M", "F", "Unkno
   labs(caption="The y axis has been altered to show better resolution, \n and outliers have been removed because they are evenly spread across all categories.", fill="Gender") +
   ggtitle("Distribution of Charges compared across Age Groups") +
   scale_fill_viridis_d(labels=c("Male", "Female", "Unknown")) +
-  theme(legend.position=c(.12, .80), legend.background=element_rect(fill="white", color="grey"))
+  theme(legend.position=c(.12, .80), 
+        legend.background=element_rect(fill="white", color="grey")) +
   xlab("Age Group of Patient") +
   ylab("Charges ($)")
 ```
@@ -754,7 +755,6 @@ hosp <- hosp %>%
     TRUE ~ 0
   ))
 
-
 # overall grouping for each procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp app
 procs <- hosp %>%
   group_by(CCS.Procedure.Code) %>%
@@ -887,7 +887,7 @@ ggplot(hosp_temp, aes(x=as.factor(DRG.Code), y=Charges, fill=proc)) +
   ylab("Charges ($)") +
   theme(legend.position=c(.8,.88), 
         legend.background=element_rect(fill="white", color="grey"),
-        legend.title="Type of Cardiac Procedure")
+        legend.title=element_text("Type of Cardiac Procedure"))
 
 # graph stomach/bowel procedures vs. charges
 ggplot(filter(hosp, (DRG.Code <=223 & DRG.Code >= 220) | DRG.Code==229), 
@@ -1116,8 +1116,14 @@ hosp <- hosp %>%
     TRUE ~ "Other"
   ))
 
-myindex <- sample(1:nrow(hosp), 100000)
-mysamp <- hosp[myindex,]
+```
 
-write.csv(mysamp, file="sample for ml.csv", row.names=F)
+```{r}
+f <- hosp %>%
+  filter(complete.cases(.))
+myindex <- sample(1:nrow(f), 10000)
+ff <- f[myindex,]
+write.csv(f, file="sample for ml.csv", row.names=F)
+
+
 ```

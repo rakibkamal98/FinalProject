@@ -3,9 +3,9 @@ title: "Week12"
 author: "Ashley Hirt, Shreya Dubey, Rakib Kamal"
 date: "11/18/2019"
 output:
-  word_document: default
-  pdf_document: default
   html_document: default
+  pdf_document: default
+  word_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -182,7 +182,8 @@ ggplot(hosp, aes(x=Ethnicity)) +
   geom_bar(stat="count") +
   ggtitle("Distribution of Ethnicity") +
   xlab("Ethnicity") +
-  ylab("Number of Admissions")
+  ylab("Number of Admissions") + 
+  theme(axis.text.x=element_text(angle=45, hjust=1, vjust=1))
 # look at number of unknown ethnicities
 sum(hosp$Ethnicity == "Unknown") # 97,180 records with Unknown ethnicities
 ```
@@ -601,7 +602,7 @@ These graphs show many expected trends shown by our correlation plot earlier. As
 In terms of feature engineering, we decided to create a feature called birthweight.cat, which divided birthweights into the categories (based on medical literature) of "Normal", "Low", "Very Low", and "Extremely Low." Below, we see that a graph of charges distribution as a function of these categories shows clearer separation of charge distributions than birthweight or severity alone (the median birth charge is shown as a blue dashed line). Thus, we expect this feature to be a good predictor of charges.
 
 ```{r}
-# Engineered feature to create birthweight cutoffs (birthweight.cat)
+# Engineered feature to create birthweight cutoffs (birthweight.cat) (see reference 2)
 hosp <- hosp %>%
   mutate(birthweight.cat = case_when(
     Birthweight < 2500 & Birthweight > 1500 ~ "Low",
@@ -760,7 +761,7 @@ hosp <- hosp %>%
     TRUE ~ 0
   ))
 
-# overall grouping for each CCS procedure (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp)
+# overall grouping for each CCS procedure (see works cited, reference 1)
 hosp <- hosp %>%
   mutate(CCS.Procedure.Group = case_when(
     CCS.Procedure.Code %in% c(1:9, 199, 188) ~ "Nervous System",
@@ -825,6 +826,9 @@ hosp <- hosp %>%
 ```
 
 
+## Appendix
+
+Below is the code and graphs used to create the DRG groupings discussed earlier. The median charge is indicated as a dark blue dashed line. Outliers were removed and the y axis was scaled to provide appropriate resolution of the boxplots.
 
 ```{r}
 # graph transplant vs. charges
@@ -1117,3 +1121,8 @@ ggplot(filter(hosp, (DRG.Code <=912 & DRG.Code >= 910)),
   xlab("DRG") +
   ylab("Charges ($)")
 ```
+
+## Works Cited
+1. Weiss, (https://www.hcup-us.ahrq.gov/reports/statbriefs/sb154.jsp)
+
+2. https://emedicine.medscape.com/article/979717-overview
